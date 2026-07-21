@@ -1,0 +1,399 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ STORE CONFIGURATION ============
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  logoUrl     String?
+  taxRate     Float    @default(0.12)
+  currency    String   @default("PHP")
+  footerMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============ CATEGORIES ============
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  color       String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ============ PRODUCTS ============
+
+model Product {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  sku           String        @unique
+  barcode       String?
+  imageUrl      String?
+  costPrice     Float         @default(0)
+  sellingPrice  Float
+  isAvailable   Boolean       @default(true)
+  isFavorite    Boolean       @default(false)
+  categoryIds   String        // JSON array of category IDs
+  variants      String?       // JSON: [{name, options: [{name, priceAdjustment}]}]
+  addons        String?       // JSON: [{name, price, isDefault}]
+  recipe        String?       // JSON: [{ingredientId, quantity, unit}]
+  sizeOptions   String?       // JSON: [{name, priceAdjustment}] e.g. S/M/L
+  hasSugarLevel Boolean       @default(false)
+  hasIceLevel   Boolean       @default(false)
+  hasHotCold    Boolean       @default(false)
+  sortOrder     Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  orderItems    OrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  inventoryItems    InventoryItem[]
+}
+
+// ============ INGREDIENTS / RAW MATERIALS ============
+
+model Ingredient {
+  id            String          @id @default(cuid())
+  name          String
+  description   String?
+  unit          String          @default("pcs")
+  costPerUnit   Float           @default(0)
+  currentStock  Float           @default(0)
+  minStock      Float           @default(0)
+  supplierId    String?
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  inventoryLogs InventoryLog[]
+  wasteLogs     WasteLog[]
+}
+
+// ============ INVENTORY ============
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  currentStock  Float     @default(0)
+  minStock      Float     @default(5)
+  maxStock      Float?
+  unit          String    @default("pcs")
+  costPrice     Float     @default(0)
+  batchNumber   String?
+  expiryDate    DateTime?
+  lastRestocked DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model InventoryLog {
+  id            String    @id @default(cuid())
+  ingredientId  String?
+  ingredient    Ingredient? @relation(fields: [ingredientId], references: [id])
+  productId     String?
+  type          String    // IN, OUT, ADJUSTMENT, WASTE, SPOILAGE
+  quantity      Float
+  previousStock Float
+  newStock      Float
+  reason        String?
+  performedBy   String?
+  createdAt     DateTime  @default(now())
+}
+
+model WasteLog {
+  id            String     @id @default(cuid())
+  ingredientId  String
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+  quantity      Float
+  reason        String?
+  costValue     Float
+  performedBy   String?
+  createdAt     DateTime  @default(now())
+}
+
+// ============ SUPPLIERS ============
+
+model Supplier {
+  id          String      @id @default(cuid())
+  name        String
+  contactPerson String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  ingredients  Ingredient[]
+  purchaseOrders PurchaseOrder[]
+}
+
+// ============ PURCHASE ORDERS ============
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  poNumber      String              @unique
+  supplierId    String
+  supplier      Supplier            @relation(fields: [supplierId], references: [id])
+  status        String              @default("PENDING") // PENDING, APPROVED, RECEIVED, CANCELLED
+  totalAmount   Float               @default(0)
+  notes         String?
+  receivedBy    String?
+  receivedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  items         PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              String          @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder   @relation(fields: [purchaseOrderId], references: [id])
+  productId       String?
+  product         Product?        @relation(fields: [productId], references: [id])
+  ingredientName  String?
+  quantity        Float
+  unitPrice       Float
+  totalPrice      Float
+  receivedQty     Float           @default(0)
+}
+
+// ============ CUSTOMERS ============
+
+model Customer {
+  id              String    @id @default(cuid())
+  name            String
+  phone           String?
+  email           String?
+  birthday        DateTime?
+  address         String?
+  loyaltyPoints   Int       @default(0)
+  cashbackBalance Float     @default(0)
+  membershipLevel String    @default("BRONZE") // BRONZE, SILVER, GOLD, PLATINUM
+  totalSpent      Float     @default(0)
+  totalVisits     Int       @default(0)
+  referralCode    String?   @unique
+  referredBy      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  orders          Order[]
+}
+
+// ============ EMPLOYEES / USERS ============
+
+model Employee {
+  id              String    @id @default(cuid())
+  name            String
+  email           String    @unique
+  phone           String?
+  role            String    @default("CASHIER") // OWNER, ADMIN, MANAGER, CASHIER, INVENTORY
+  pin             String
+  isActive        Boolean   @default(true)
+  hireDate        DateTime?
+  hourlyRate      Float     @default(0)
+  commissionRate  Float     @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  attendances     Attendance[]
+  cashDrawers     CashDrawer[]
+  orders          Order[]
+  activityLogs    ActivityLog[]
+  salesPerformance SalesPerformance[]
+}
+
+model Attendance {
+  id            String    @id @default(cuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  clockIn       DateTime
+  clockOut      DateTime?
+  shift         String    @default("MORNING")
+  hoursWorked   Float?
+  overtimeHours Float?
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+}
+
+model CashDrawer {
+  id            String    @id @default(cuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  openingAmount Float
+  closingAmount Float?
+  status        String    @default("OPEN") // OPEN, CLOSED
+  openedAt      DateTime  @default(now())
+  closedAt      DateTime?
+  notes         String?
+}
+
+model SalesPerformance {
+  id            String    @id @default(cuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  date          DateTime
+  totalSales    Float     @default(0)
+  transactionCount Int    @default(0)
+  averageOrderValue Float @default(0)
+  commission    Float     @default(0)
+  createdAt     DateTime  @default(now())
+}
+
+// ============ ORDERS ============
+
+model Order {
+  id                String       @id @default(cuid())
+  orderNumber       String       @unique
+  customerId        String?
+  customer          Customer?    @relation(fields: [customerId], references: [id])
+  employeeId        String?
+  employee          Employee?    @relation(fields: [employeeId], references: [id])
+  orderType         String       @default("DINE_IN") // DINE_IN, TAKE_OUT, DELIVERY
+  status            String       @default("COMPLETED") // COMPLETED, VOID, REFUND, HOLD
+  subtotal          Float        @default(0)
+  discountAmount    Float        @default(0)
+  discountType      String?      // PERCENTAGE, FIXED, SENIOR_CITIZEN, PWD, EMPLOYEE, PROMO
+  discountCode      String?
+  taxAmount         Float        @default(0)
+  taxExempt         Boolean      @default(false)
+  totalAmount       Float        @default(0)
+  amountPaid        Float        @default(0)
+  changeAmount      Float        @default(0)
+  paymentMethod     String       @default("CASH") // CASH, CREDIT_CARD, DEBIT_CARD, GCASH, MAYA, BANK_TRANSFER, GIFT_CERTIFICATE, STORE_CREDIT
+  paymentNote       String?
+  referenceNumber   String?
+  notes             String?
+  isSplit           Boolean      @default(false)
+  splitFromOrderId  String?
+  loyaltyPointsEarned Int       @default(0)
+  receiptPrinted    Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  items             OrderItem[]
+  payments          Payment[]
+  refunds           Refund[]
+}
+
+model OrderItem {
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id])
+  productId       String
+  product         Product   @relation(fields: [productId], references: [id])
+  productName     String
+  quantity        Int
+  unitPrice       Float
+  subtotal        Float
+  variant         String?   // JSON: selected variant
+  size            String?
+  sugarLevel      String?   // 0%, 25%, 50%, 75%, 100%
+  iceLevel        String?   // NO_ICE, LESS_ICE, REGULAR
+  temperature     String?   // HOT, COLD
+  addons          String?   // JSON: [{name, price}]
+  notes           String?
+  costPrice       Float     @default(0)
+  profit          Float     @default(0)
+  createdAt       DateTime  @default(now())
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id])
+  method          String
+  amount          Float
+  referenceNumber String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+}
+
+model Refund {
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id])
+  reason          String
+  amount          Float
+  refundedBy      String?
+  createdAt       DateTime  @default(now())
+}
+
+// ============ DISCOUNTS & COUPONS ============
+
+model Discount {
+  id              String    @id @default(cuid())
+  name            String
+  code            String?   @unique
+  type            String    // PERCENTAGE, FIXED, BUY_ONE_GET_ONE
+  value           Float
+  minOrderAmount  Float?
+  maxUses         Int?
+  currentUses     Int       @default(0)
+  validFrom       DateTime?
+  validUntil      DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model GiftCertificate {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  initialAmount   Float
+  remainingAmount Float
+  customerId      String?
+  issuedBy        String?
+  isActive        Boolean   @default(true)
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+// ============ NOTIFICATIONS ============
+
+model Notification {
+  id            String    @id @default(cuid())
+  type          String    // LOW_STOCK, EXPIRING, REFUND, CLOCK_IN, CLOCK_OUT, CLOSING, BACKUP
+  title         String
+  message       String
+  isRead        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+}
+
+// ============ ACTIVITY LOGS ============
+
+model ActivityLog {
+  id            String    @id @default(cuid())
+  employeeId    String?
+  employee      Employee? @relation(fields: [employeeId], references: [id])
+  action        String
+  entity        String?
+  entityId      String?
+  details       String?
+  ipAddress     String?
+  createdAt     DateTime  @default(now())
+}
+
+// ============ STORE SETTINGS ============
+
+model StoreSettings {
+  id                    String   @id @default(cuid())
+  key                   String   @unique
+  value                 String
+  description           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}

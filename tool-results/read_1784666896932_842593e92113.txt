@@ -1,0 +1,693 @@
+  1000→          className="absolute inset-0 bg-black/70 backdrop-blur-md"
+  1001→          onClick={() => setQuickAddProduct(null)}
+  1002→          initial={{ opacity: 0 }}
+  1003→          animate={{ opacity: 1 }}
+  1004→          exit={{ opacity: 0 }}
+  1005→        />
+  1006→        <motion.div
+  1007→          className="relative z-10 w-full sm:max-w-md sm:rounded-2xl glass-strong rounded-t-3xl max-h-[90vh] overflow-y-auto"
+  1008→          initial={isMobile ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
+  1009→          animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1 }}
+  1010→          exit={isMobile ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
+  1011→          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+  1012→        >
+  1013→          <div className="p-5">
+  1014→            {/* Header */}
+  1015→            <div className="flex items-center justify-between mb-4">
+  1016→              <div className="flex items-center gap-3">
+  1017→                <div className="w-10 h-10 rounded-xl bg-[#C48A3A]/15 flex items-center justify-center text-lg">
+  1018→                  {getCategoryEmoji(quickAddProduct.name)}
+  1019→                </div>
+  1020→                <div>
+  1021→                  <h3 className="text-base font-bold text-white">{quickAddProduct.name}</h3>
+  1022→                  <p className="text-xs text-white/40">{formatCurrency(quickAddProduct.sellingPrice)}</p>
+  1023→                </div>
+  1024→              </div>
+  1025→              <button
+  1026→                onClick={() => setQuickAddProduct(null)}
+  1027→                className="w-8 h-8 rounded-lg glass-subtle flex items-center justify-center text-white/40 hover:text-white transition-colors"
+  1028→              >
+  1029→                <X className="w-4 h-4" />
+  1030→              </button>
+  1031→            </div>
+  1032→
+  1033→            {/* Size Selection */}
+  1034→            {quickAddProduct.sizeOptions && (
+  1035→              <div className="mb-4">
+  1036→                <label className="text-xs font-medium text-white/50 mb-2 block">Size</label>
+  1037→                <div className="flex gap-2">
+  1038→                  {SIZES.map((size) => (
+  1039→                    <button
+  1040→                      key={size}
+  1041→                      onClick={() => setQaSize(size)}
+  1042→                      className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+  1043→                        qaSize === size
+  1044→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1045→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1046→                      }`}
+  1047→                    >
+  1048→                      {size}
+  1049→                      {SIZE_PRICE_ADJ[size] > 0 && (
+  1050→                        <span className="block text-[10px] mt-0.5 opacity-70">+{formatCurrency(SIZE_PRICE_ADJ[size])}</span>
+  1051→                      )}
+  1052→                    </button>
+  1053→                  ))}
+  1054→                </div>
+  1055→              </div>
+  1056→            )}
+  1057→
+  1058→            {/* Temperature (Hot/Cold) */}
+  1059→            {quickAddProduct.hasHotCold && (
+  1060→              <div className="mb-4">
+  1061→                <label className="text-xs font-medium text-white/50 mb-2 block">Temperature</label>
+  1062→                <div className="flex gap-2">
+  1063→                  {TEMPERATURES.map((temp) => (
+  1064→                    <button
+  1065→                      key={temp}
+  1066→                      onClick={() => setQaTemp(temp)}
+  1067→                      className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+  1068→                        qaTemp === temp
+  1069→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1070→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1071→                      }`}
+  1072→                    >
+  1073→                      {temp === 'Hot' ? '🔥' : '🧊'} {temp}
+  1074→                    </button>
+  1075→                  ))}
+  1076→                </div>
+  1077→              </div>
+  1078→            )}
+  1079→
+  1080→            {/* Sugar Level */}
+  1081→            {quickAddProduct.hasSugarLevel && (
+  1082→              <div className="mb-4">
+  1083→                <label className="text-xs font-medium text-white/50 mb-2 block">Sugar Level</label>
+  1084→                <div className="flex gap-1.5 flex-wrap">
+  1085→                  {SUGAR_LEVELS.map((level) => (
+  1086→                    <button
+  1087→                      key={level}
+  1088→                      onClick={() => setQaSugar(level)}
+  1089→                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+  1090→                        qaSugar === level
+  1091→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1092→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1093→                      }`}
+  1094→                    >
+  1095→                      {level}
+  1096→                    </button>
+  1097→                  ))}
+  1098→                </div>
+  1099→              </div>
+  1100→            )}
+  1101→
+  1102→            {/* Ice Level */}
+  1103→            {quickAddProduct.hasIceLevel && (
+  1104→              <div className="mb-4">
+  1105→                <label className="text-xs font-medium text-white/50 mb-2 block">Ice Level</label>
+  1106→                <div className="flex gap-1.5 flex-wrap">
+  1107→                  {ICE_LEVELS.map((level) => (
+  1108→                    <button
+  1109→                      key={level}
+  1110→                      onClick={() => setQaIce(level)}
+  1111→                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+  1112→                        qaIce === level
+  1113→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1114→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1115→                      }`}
+  1116→                    >
+  1117→                      {level}
+  1118→                    </button>
+  1119→                  ))}
+  1120→                </div>
+  1121→              </div>
+  1122→            )}
+  1123→
+  1124→            {/* Addons */}
+  1125→            {parsedAddons.length > 0 && (
+  1126→              <div className="mb-4">
+  1127→                <label className="text-xs font-medium text-white/50 mb-2 block">Add-ons</label>
+  1128→                <div className="space-y-1.5">
+  1129→                  {parsedAddons.map((addon) => {
+  1130→                    const isSelected = qaAddons.some((a) => a.name === addon.name);
+  1131→                    return (
+  1132→                      <button
+  1133→                        key={addon.name}
+  1134→                        onClick={() => toggleAddon(addon.name, addon.price)}
+  1135→                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-200 ${
+  1136→                          isSelected
+  1137→                            ? 'glass bg-[#C48A3A]/10 border-[#C48A3A]/30'
+  1138→                            : 'glass-subtle text-white/60 hover:text-white/80'
+  1139→                        }`}
+  1140→                      >
+  1141→                        <div className="flex items-center gap-2">
+  1142→                          <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+  1143→                            isSelected ? 'bg-[#C48A3A] border-[#C48A3A]' : 'border-white/20'
+  1144→                          }`}>
+  1145→                            {isSelected && <Check className="w-3 h-3 text-[#111111]" />}
+  1146→                          </div>
+  1147→                          <span className={isSelected ? 'text-white' : ''}>{addon.name}</span>
+  1148→                        </div>
+  1149→                        <span className="text-[#C48A3A] text-[11px]">+{formatCurrency(addon.price)}</span>
+  1150→                      </button>
+  1151→                    );
+  1152→                  })}
+  1153→                </div>
+  1154→              </div>
+  1155→            )}
+  1156→
+  1157→            {/* Notes */}
+  1158→            <div className="mb-4">
+  1159→              <label className="text-xs font-medium text-white/50 mb-2 block">Notes</label>
+  1160→              <input
+  1161→                type="text"
+  1162→                value={qaNotes}
+  1163→                onChange={(e) => setQaNotes(e.target.value)}
+  1164→                placeholder="Special instructions..."
+  1165→                className="w-full glass-subtle rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1166→              />
+  1167→            </div>
+  1168→
+  1169→            {/* Quantity + Add to Cart */}
+  1170→            <div className="flex items-center gap-3">
+  1171→              <div className="flex items-center gap-2 glass-subtle rounded-xl p-1">
+  1172→                <button
+  1173→                  onClick={() => setQaQty(Math.max(1, qaQty - 1))}
+  1174→                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+  1175→                >
+  1176→                  <Minus className="w-4 h-4" />
+  1177→                </button>
+  1178→                <span className="w-8 text-center text-base font-bold text-white">{qaQty}</span>
+  1179→                <button
+  1180→                  onClick={() => setQaQty(qaQty + 1)}
+  1181→                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+  1182→                >
+  1183→                  <Plus className="w-4 h-4" />
+  1184→                </button>
+  1185→              </div>
+  1186→              <motion.button
+  1187→                onClick={handleQuickAdd}
+  1188→                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm flex items-center justify-center gap-2"
+  1189→                whileHover={{ scale: 1.02 }}
+  1190→                whileTap={{ scale: 0.98 }}
+  1191→              >
+  1192→                <Plus className="w-4 h-4" />
+  1193→                Add to Cart · {formatCurrency(qaUnitPrice * qaQty)}
+  1194→              </motion.button>
+  1195→            </div>
+  1196→          </div>
+  1197→        </motion.div>
+  1198→      </motion.div>
+  1199→    );
+  1200→  }
+  1201→
+  1202→  // ============ CHECKOUT DIALOG ============
+  1203→  function renderCheckoutDialog() {
+  1204→    if (!isCheckoutOpen) return null;
+  1205→
+  1206→    return (
+  1207→      <motion.div
+  1208→        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+  1209→        initial={{ opacity: 0 }}
+  1210→        animate={{ opacity: 1 }}
+  1211→        exit={{ opacity: 0 }}
+  1212→      >
+  1213→        <motion.div
+  1214→          className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+  1215→          onClick={() => setCheckoutOpen(false)}
+  1216→          initial={{ opacity: 0 }}
+  1217→          animate={{ opacity: 1 }}
+  1218→          exit={{ opacity: 0 }}
+  1219→        />
+  1220→
+  1221→        <motion.div
+  1222→          className="relative z-10 w-full max-w-2xl glass-strong rounded-2xl overflow-hidden max-h-[95vh] flex flex-col"
+  1223→          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+  1224→          animate={{ scale: 1, opacity: 1, y: 0 }}
+  1225→          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+  1226→          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+  1227→        >
+  1228→          {/* Header */}
+  1229→          <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+  1230→            <h2 className="text-lg font-bold text-white">Checkout</h2>
+  1231→            <button
+  1232→              onClick={() => setCheckoutOpen(false)}
+  1233→              className="w-8 h-8 rounded-lg glass-subtle flex items-center justify-center text-white/40 hover:text-white transition-colors"
+  1234→            >
+  1235→              <X className="w-4 h-4" />
+  1236→            </button>
+  1237→          </div>
+  1238→
+  1239→          <div className="overflow-y-auto flex-1 p-4 space-y-5">
+  1240→            {/* Order Summary */}
+  1241→            <div>
+  1242→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Order Summary</h3>
+  1243→              <div className="glass-subtle rounded-xl overflow-hidden">
+  1244→                <div className="max-h-36 overflow-y-auto">
+  1245→                  {cart.map((item) => (
+  1246→                    <div key={item.tempId} className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04] last:border-0">
+  1247→                      <div className="flex-1 min-w-0">
+  1248→                        <p className="text-xs text-white/80 truncate">
+  1249→                          {item.quantity}x {item.product.name}
+  1250→                          {item.size && <span className="text-white/40"> ({item.size})</span>}
+  1251→                        </p>
+  1252→                      </div>
+  1253→                      <span className="text-xs text-white/60 ml-2 flex-shrink-0">{formatCurrency(item.subtotal)}</span>
+  1254→                    </div>
+  1255→                  ))}
+  1256→                </div>
+  1257→                <div className="px-3 py-2 bg-white/[0.02] space-y-1">
+  1258→                  <div className="flex justify-between text-xs text-white/50">
+  1259→                    <span>Subtotal</span>
+  1260→                    <span>{formatCurrency(checkoutSubtotal)}</span>
+  1261→                  </div>
+  1262→                  {checkoutDiscount > 0 && (
+  1263→                    <div className="flex justify-between text-xs text-emerald-400">
+  1264→                      <span>Discount</span>
+  1265→                      <span>-{formatCurrency(checkoutDiscount)}</span>
+  1266→                    </div>
+  1267→                  )}
+  1268→                  <div className="flex justify-between text-xs text-white/50">
+  1269→                    <span>Tax (12%)</span>
+  1270→                    <span>{formatCurrency(checkoutTax)}</span>
+  1271→                  </div>
+  1272→                  <div className="flex justify-between text-sm font-bold text-white pt-1 border-t border-white/[0.06]">
+  1273→                    <span>Total</span>
+  1274→                    <span className="text-[#C48A3A]">{formatCurrency(checkoutTotal)}</span>
+  1275→                  </div>
+  1276→                </div>
+  1277→              </div>
+  1278→            </div>
+  1279→
+  1280→            {/* Payment Method */}
+  1281→            <div>
+  1282→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Payment Method</h3>
+  1283→              <div className="grid grid-cols-4 gap-2">
+  1284→                {PAYMENT_METHODS.map((pm) => (
+  1285→                  <button
+  1286→                    key={pm.value}
+  1287→                    onClick={() => setCheckoutPayment(pm.value as PaymentMethod)}
+  1288→                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-all duration-200 ${
+  1289→                      checkoutPayment === pm.value
+  1290→                        ? 'glass bg-[#C48A3A]/15 border-[#C48A3A]/40 text-[#C48A3A]'
+  1291→                        : 'glass-subtle text-white/50 hover:text-white/80 hover:bg-white/[0.06]'
+  1292→                    }`}
+  1293→                  >
+  1294→                    {PAYMENT_ICONS[pm.value]}
+  1295→                    <span className="text-[10px] leading-tight text-center">{pm.label}</span>
+  1296→                  </button>
+  1297→                ))}
+  1298→              </div>
+  1299→            </div>
+  1300→
+  1301→            {/* Cash Amount */}
+  1302→            {checkoutPayment === 'CASH' && (
+  1303→              <motion.div
+  1304→                initial={{ opacity: 0, height: 0 }}
+  1305→                animate={{ opacity: 1, height: 'auto' }}
+  1306→                exit={{ opacity: 0, height: 0 }}
+  1307→              >
+  1308→                <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Amount Tendered</h3>
+  1309→                <div className="glass-subtle rounded-xl p-3 space-y-2">
+  1310→                  <input
+  1311→                    type="number"
+  1312→                    value={cashTendered}
+  1313→                    onChange={(e) => setCashTendered(e.target.value)}
+  1314→                    placeholder="Enter amount..."
+  1315→                    className="w-full bg-transparent text-lg font-bold text-white placeholder:text-white/20 focus:outline-none"
+  1316→                    autoFocus
+  1317→                  />
+  1318→                  {/* Quick amount buttons */}
+  1319→                  <div className="flex gap-1.5 flex-wrap">
+  1320→                    {[50, 100, 200, 500, 1000].map((amt) => (
+  1321→                      <button
+  1322→                        key={amt}
+  1323→                        onClick={() => setCashTendered(String(amt))}
+  1324→                        className="px-3 py-1 rounded-lg glass-subtle text-[10px] text-white/50 hover:text-white hover:bg-[#C48A3A]/20 hover:text-[#C48A3A] transition-colors"
+  1325→                      >
+  1326→                        {formatCurrency(amt)}
+  1327→                      </button>
+  1328→                    ))}
+  1329→                    <button
+  1330→                      onClick={() => setCashTendered(String(Math.ceil(checkoutTotal)))}
+  1331→                      className="px-3 py-1 rounded-lg glass-subtle text-[10px] text-[#C48A3A] hover:bg-[#C48A3A]/20 transition-colors"
+  1332→                    >
+  1333→                      Exact
+  1334→                    </button>
+  1335→                  </div>
+  1336→                  {cashTenderedNum >= checkoutTotal && (
+  1337→                    <div className="flex justify-between text-sm pt-1 border-t border-white/[0.06]">
+  1338→                      <span className="text-white/50">Change</span>
+  1339→                      <span className="text-emerald-400 font-bold">{formatCurrency(changeAmount)}</span>
+  1340→                    </div>
+  1341→                  )}
+  1342→                </div>
+  1343→              </motion.div>
+  1344→            )}
+  1345→
+  1346→            {/* Discount */}
+  1347→            <div>
+  1348→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Discount</h3>
+  1349→              <div className="space-y-2">
+  1350→                <div className="flex gap-2">
+  1351→                  <select
+  1352→                    value={discountType}
+  1353→                    onChange={(e) => { setDiscountType(e.target.value as DiscountType | ''); if (e.target.value === '') setAppliedDiscount(null); }}
+  1354→                    className="flex-1 glass-subtle rounded-xl px-3 py-2.5 text-xs text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50 appearance-none cursor-pointer"
+  1355→                  >
+  1356→                    <option value="" className="bg-[#1E1E1E]">No Discount</option>
+  1357→                    {DISCOUNT_TYPES.map((dt) => (
+  1358→                      <option key={dt.value} value={dt.value} className="bg-[#1E1E1E]">{dt.label}</option>
+  1359→                    ))}
+  1360→                  </select>
+  1361→                  {discountType && discountType !== 'SENIOR_CITIZEN' && discountType !== 'PWD' && discountType !== 'EMPLOYEE' && discountType !== 'PROMO' && (
+  1362→                    <input
+  1363→                      type="number"
+  1364→                      value={discountValue}
+  1365→                      onChange={(e) => setDiscountValue(e.target.value)}
+  1366→                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Amount'}
+  1367→                      className="w-24 glass-subtle rounded-xl px-3 py-2.5 text-xs text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1368→                    />
+  1369→                  )}
+  1370→                </div>
+  1371→                {discountType === 'PROMO' && (
+  1372→                  <div className="relative">
+  1373→                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+  1374→                    <input
+  1375→                      type="text"
+  1376→                      value={promoCode}
+  1377→                      onChange={(e) => setPromoCode(e.target.value)}
+  1378→                      placeholder="Enter promo code..."
+  1379→                      className="w-full glass-subtle rounded-xl pl-9 pr-3 py-2.5 text-xs text-white bg-transparent placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1380→                    />
+  1381→                  </div>
+  1382→                )}
+  1383→                {appliedDiscount && appliedDiscount.amount > 0 && (
+  1384→                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+  1385→                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+  1386→                      <BadgePercent className="w-3.5 h-3.5" />
+  1387→                      Discount applied
+  1388→                    </span>
+  1389→                    <span className="text-xs text-emerald-400 font-bold">-{formatCurrency(appliedDiscount.amount)}</span>
+  1390→                  </div>
+  1391→                )}
+  1392→              </div>
+  1393→            </div>
+  1394→
+  1395→            {/* Customer */}
+  1396→            <div>
+  1397→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Customer (Optional)</h3>
+  1398→              <div className="relative">
+  1399→                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+  1400→                <input
+  1401→                  type="text"
+  1402→                  value={customerSearch}
+  1403→                  onChange={(e) => handleSearchCustomer(e.target.value)}
+  1404→                  onFocus={() => customerResults.length > 0 && setShowCustomerDropdown(true)}
+  1405→                  placeholder="Search customer name..."
+  1406→                  className="w-full glass-subtle rounded-xl pl-9 pr-3 py-2.5 text-xs text-white bg-transparent placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1407→                />
+  1408→                {selectedCustomer && (
+  1409→                  <button
+  1410→                    onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
+  1411→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+  1412→                  >
+  1413→                    <X className="w-3.5 h-3.5" />
+  1414→                  </button>
+  1415→                )}
+  1416→                <AnimatePresence>
+  1417→                  {showCustomerDropdown && customerResults.length > 0 && (
+  1418→                    <motion.div
+  1419→                      className="absolute top-full left-0 right-0 mt-1 glass-strong rounded-xl overflow-hidden z-20"
+  1420→                      initial={{ opacity: 0, y: -4 }}
+  1421→                      animate={{ opacity: 1, y: 0 }}
+  1422→                      exit={{ opacity: 0, y: -4 }}
+  1423→                    >
+  1424→                      {customerResults.map((customer) => (
+  1425→                        <button
+  1426→                          key={customer.id}
+  1427→                          onClick={() => handleSelectCustomer(customer)}
+  1428→                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/[0.06] transition-colors text-left"
+  1429→                        >
+  1430→                          <div className="flex items-center gap-2">
+  1431→                            <div className="w-6 h-6 rounded-full bg-[#C48A3A]/15 flex items-center justify-center">
+  1432→                              <User className="w-3 h-3 text-[#C48A3A]" />
+  1433→                            </div>
+  1434→                            <span className="text-xs text-white/80">{customer.name}</span>
+  1435→                          </div>
+  1436→                          <span className="text-[10px] text-white/30">{customer.loyaltyPoints} pts</span>
+  1437→                        </button>
+  1438→                      ))}
+  1439→                    </motion.div>
+  1440→                  )}
+  1441→                </AnimatePresence>
+  1442→              </div>
+  1443→            </div>
+  1444→
+  1445→            {/* Error */}
+  1446→            {orderError && (
+  1447→              <motion.div
+  1448→                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20"
+  1449→                initial={{ opacity: 0, y: -4 }}
+  1450→                animate={{ opacity: 1, y: 0 }}
+  1451→              >
+  1452→                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+  1453→                <span className="text-xs text-red-400">{orderError}</span>
+  1454→              </motion.div>
+  1455→            )}
+  1456→          </div>
+  1457→
+  1458→          {/* Complete Sale Button */}
+  1459→          <div className="p-4 border-t border-white/[0.06]">
+  1460→            <motion.button
+  1461→              onClick={handleCompleteSale}
+  1462→              disabled={isCompleting || cart.length === 0}
+  1463→              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm hover:shadow-xl hover:shadow-[#C48A3A]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+  1464→              whileHover={!isCompleting ? { scale: 1.01 } : {}}
+  1465→              whileTap={!isCompleting ? { scale: 0.99 } : {}}
+  1466→            >
+  1467→              {isCompleting ? (
+  1468→                <>
+  1469→                  <div className="w-4 h-4 border-2 border-[#111111]/30 border-t-[#111111] rounded-full animate-spin" />
+  1470→                  Processing...
+  1471→                </>
+  1472→              ) : (
+  1473→                <>
+  1474→                  <Check className="w-4 h-4" />
+  1475→                  Complete Sale · {formatCurrency(checkoutTotal)}
+  1476→                </>
+  1477→              )}
+  1478→            </motion.button>
+  1479→          </div>
+  1480→        </motion.div>
+  1481→      </motion.div>
+  1482→    );
+  1483→  }
+  1484→
+  1485→  // ============ RECEIPT VIEW ============
+  1486→  function renderReceiptView() {
+  1487→    if (!isReceiptOpen || !currentReceiptOrder) return null;
+  1488→
+  1489→    const order = currentReceiptOrder;
+  1490→    const payLabel = PAYMENT_METHODS.find(pm => pm.value === order.paymentMethod)?.label ?? order.paymentMethod;
+  1491→
+  1492→    return (
+  1493→      <motion.div
+  1494→        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+  1495→        initial={{ opacity: 0 }}
+  1496→        animate={{ opacity: 1 }}
+  1497→        exit={{ opacity: 0 }}
+  1498→      >
+  1499→        <motion.div
+  1500→          className="absolute inset-0 bg-black/80 backdrop-blur-lg"
+  1501→          onClick={handleNewOrder}
+  1502→          initial={{ opacity: 0 }}
+  1503→          animate={{ opacity: 1 }}
+  1504→          exit={{ opacity: 0 }}
+  1505→        />
+  1506→
+  1507→        <motion.div
+  1508→          className="relative z-10 w-full max-w-sm"
+  1509→          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+  1510→          animate={{ scale: 1, opacity: 1, y: 0 }}
+  1511→          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+  1512→          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+  1513→        >
+  1514→          {/* Receipt Paper */}
+  1515→          <div className="bg-white rounded-t-2xl shadow-2xl overflow-hidden">
+  1516→            {/* Torn edge effect */}
+  1517→            <div className="h-3 bg-white relative">
+  1518→              <svg className="absolute bottom-0 left-0 right-0 -translate-y-full" viewBox="0 0 400 12" preserveAspectRatio="none">
+  1519→                <path d="M0,12 Q10,0 20,12 Q30,0 40,12 Q50,0 60,12 Q70,0 80,12 Q90,0 100,12 Q110,0 120,12 Q130,0 140,12 Q150,0 160,12 Q170,0 180,12 Q190,0 200,12 Q210,0 220,12 Q230,0 240,12 Q250,0 260,12 Q270,0 280,12 Q290,0 300,12 Q310,0 320,12 Q330,0 340,12 Q350,0 360,12 Q370,0 380,12 Q390,0 400,12" fill="white" />
+  1520→              </svg>
+  1521→            </div>
+  1522→
+  1523→            <div className="px-6 py-4 receipt-font text-black">
+  1524→              {/* Store Header */}
+  1525→              <div className="text-center mb-3">
+  1526→                <h2 className="text-base font-bold tracking-wide">O'Galley</h2>
+  1527→                <p className="text-[10px] text-gray-500 mt-0.5">123 Bonifacio Street, Makati City</p>
+  1528→                <p className="text-[10px] text-gray-500">Tel: +63 2 8888 1234</p>
+  1529→              </div>
+  1530→
+  1531→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1532→
+  1533→              {/* Order Info */}
+  1534→              <div className="flex justify-between text-[11px] mb-1">
+  1535→                <span className="text-gray-500">Order #{order.orderNumber}</span>
+  1536→                <span className="text-gray-500">{ORDER_TYPES.find(o => o.value === order.orderType)?.label}</span>
+  1537→              </div>
+  1538→              <div className="flex justify-between text-[11px] mb-1">
+  1539→                <span className="text-gray-500">Cashier: Staff</span>
+  1540→                <span className="text-gray-500">{new Date(order.createdAt).toLocaleString()}</span>
+  1541→              </div>
+  1542→
+  1543→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1544→
+  1545→              {/* Items */}
+  1546→              <div className="space-y-1.5">
+  1547→                {(order.items ?? []).map((item, idx) => (
+  1548→                  <div key={idx} className="text-[11px]">
+  1549→                    <div className="flex justify-between">
+  1550→                      <span className="font-medium">{item.quantity}x {item.productName}</span>
+  1551→                      <span className="font-medium">{formatCurrency(item.subtotal)}</span>
+  1552→                    </div>
+  1553→                    {item.size && <div className="text-gray-400 text-[10px] ml-4">Size: {item.size}</div>}
+  1554→                    {item.sugarLevel && <div className="text-gray-400 text-[10px] ml-4">Sugar: {item.sugarLevel}</div>}
+  1555→                    {item.iceLevel && <div className="text-gray-400 text-[10px] ml-4">Ice: {item.iceLevel}</div>}
+  1556→                    {item.temperature && <div className="text-gray-400 text-[10px] ml-4">{item.temperature}</div>}
+  1557→                    {item.notes && <div className="text-gray-400 text-[10px] ml-4 italic">{item.notes}</div>}
+  1558→                  </div>
+  1559→                ))}
+  1560→              </div>
+  1561→
+  1562→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1563→
+  1564→              {/* Totals */}
+  1565→              <div className="space-y-0.5 text-[11px]">
+  1566→                <div className="flex justify-between text-gray-600">
+  1567→                  <span>Subtotal</span>
+  1568→                  <span>{formatCurrency(order.subtotal)}</span>
+  1569→                </div>
+  1570→                {order.discountAmount > 0 && (
+  1571→                  <div className="flex justify-between text-gray-600">
+  1572→                    <span>Discount{order.discountType ? ` (${order.discountType})` : ''}</span>
+  1573→                    <span>-{formatCurrency(order.discountAmount)}</span>
+  1574→                  </div>
+  1575→                )}
+  1576→                <div className="flex justify-between text-gray-600">
+  1577→                  <span>Tax (12%)</span>
+  1578→                  <span>{formatCurrency(order.taxAmount)}</span>
+  1579→                </div>
+  1580→                <div className="border-t border-dashed border-gray-300 my-1" />
+  1581→                <div className="flex justify-between text-sm font-bold">
+  1582→                  <span>TOTAL</span>
+  1583→                  <span>{formatCurrency(order.totalAmount)}</span>
+  1584→                </div>
+  1585→              </div>
+  1586→
+  1587→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1588→
+  1589→              {/* Payment Info */}
+  1590→              <div className="space-y-0.5 text-[11px]">
+  1591→                <div className="flex justify-between text-gray-600">
+  1592→                  <span>Payment</span>
+  1593→                  <span>{payLabel}</span>
+  1594→                </div>
+  1595→                <div className="flex justify-between text-gray-600">
+  1596→                  <span>Amount Paid</span>
+  1597→                  <span>{formatCurrency(order.amountPaid)}</span>
+  1598→                </div>
+  1599→                {order.changeAmount > 0 && (
+  1600→                  <div className="flex justify-between font-bold text-[11px]">
+  1601→                    <span>Change</span>
+  1602→                    <span>{formatCurrency(order.changeAmount)}</span>
+  1603→                  </div>
+  1604→                )}
+  1605→              </div>
+  1606→
+  1607→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1608→
+  1609→              <div className="text-center text-[10px] text-gray-400 pt-1">
+  1610→                <p>Thank you for visiting O'Galley!</p>
+  1611→                <p className="mt-0.5">Please come again</p>
+  1612→              </div>
+  1613→            </div>
+  1614→
+  1615→            {/* Bottom torn edge */}
+  1616→            <div className="h-3 bg-white relative">
+  1617→              <svg className="absolute top-0 left-0 right-0 translate-y-full" viewBox="0 0 400 12" preserveAspectRatio="none">
+  1618→                <path d="M0,0 Q10,12 20,0 Q30,12 40,0 Q50,12 60,0 Q70,12 80,0 Q90,12 100,0 Q110,12 120,0 Q130,12 140,0 Q150,12 160,0 Q170,12 180,0 Q190,12 200,0 Q210,12 220,0 Q230,12 240,0 Q250,12 260,0 Q270,12 280,0 Q290,12 300,0 Q310,12 320,0 Q330,12 340,0 Q350,12 360,0 Q370,12 380,0 Q390,12 400,0" fill="white" />
+  1619→              </svg>
+  1620→            </div>
+  1621→          </div>
+  1622→
+  1623→          {/* Actions */}
+  1624→          <div className="flex gap-3 mt-4">
+  1625→            <motion.button
+  1626→              onClick={handlePrintReceipt}
+  1627→              className="flex-1 py-3 rounded-xl glass text-white/80 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white/[0.08] transition-colors"
+  1628→              whileHover={{ scale: 1.02 }}
+  1629→              whileTap={{ scale: 0.98 }}
+  1630→            >
+  1631→              <Printer className="w-4 h-4" />
+  1632→              Print Receipt
+  1633→            </motion.button>
+  1634→            <motion.button
+  1635→              onClick={handleNewOrder}
+  1636→              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm flex items-center justify-center gap-2"
+  1637→              whileHover={{ scale: 1.02 }}
+  1638→              whileTap={{ scale: 0.98 }}
+  1639→            >
+  1640→              <ShoppingBag className="w-4 h-4" />
+  1641→              New Order
+  1642→            </motion.button>
+  1643→          </div>
+  1644→        </motion.div>
+  1645→      </motion.div>
+  1646→    );
+  1647→  }
+  1648→
+  1649→  // ============ MAIN RENDER ============
+  1650→  return (
+  1651→    <div className="h-full flex flex-col md:flex-row gap-0 md:gap-4 overflow-hidden bg-[#111111]">
+  1652→      {/* Left Side: Categories + Product Grid */}
+  1653→      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+  1654→        {/* Categories Bar */}
+  1655→        <div className="flex-shrink-0 p-2 md:p-3">
+  1656→          {renderCategoriesBar()}
+  1657→        </div>
+  1658→
+  1659→        {/* Mobile Search */}
+  1660→        {renderMobileSearch()}
+  1661→
+  1662→        {/* Product Grid */}
+  1663→        {renderProductGrid()}
+  1664→      </div>
+  1665→
+  1666→      {/* Right Side: Cart Panel (Desktop) */}
+  1667→      {!isMobile && (
+  1668→        <div className="w-[380px] flex-shrink-0 hidden md:flex">
+  1669→          <div className="w-full glass-strong rounded-2xl p-4 flex flex-col overflow-hidden">
+  1670→            {renderCartPanel()}
+  1671→          </div>
+  1672→        </div>
+  1673→      )}
+  1674→
+  1675→      {/* Mobile Cart FAB */}
+  1676→      <AnimatePresence>{renderMobileCartButton()}</AnimatePresence>
+  1677→
+  1678→      {/* Mobile Cart Sheet */}
+  1679→      {renderMobileCartSheet()}
+  1680→
+  1681→      {/* Quick Add Dialog */}
+  1682→      <AnimatePresence>{quickAddProduct && renderQuickAddDialog()}</AnimatePresence>
+  1683→
+  1684→      {/* Checkout Dialog */}
+  1685→      <AnimatePresence>{isCheckoutOpen && renderCheckoutDialog()}</AnimatePresence>
+  1686→
+  1687→      {/* Receipt View */}
+  1688→      <AnimatePresence>{isReceiptOpen && renderReceiptView()}</AnimatePresence>
+  1689→    </div>
+  1690→  );
+
+[showing lines 1000-1690 of 1691; use offset=1691 with limit to continue reading]

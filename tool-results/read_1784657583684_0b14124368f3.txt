@@ -1,0 +1,1556 @@
+    50→  GIFT_CERTIFICATE: <Gift className="w-5 h-5" />,
+    51→  STORE_CREDIT: <BadgePercent className="w-5 h-5" />,
+    52→};
+    53→
+    54→const ORDER_TYPE_ICONS: Record<string, React.ReactNode> = {
+    55→  DINE_IN: <UtensilsCrossed className="w-3.5 h-3.5" />,
+    56→  TAKE_OUT: <Package className="w-3.5 h-3.5" />,
+    57→  DELIVERY: <Truck className="w-3.5 h-3.5" />,
+    58→};
+    59→
+    60→// ============ MAIN COMPONENT ============
+    61→
+    62→export default function POSView() {
+    63→  const isMobile = useIsMobile();
+    64→
+    65→  // Data
+    66→  const [categories, setCategories] = useState<Category[]>([]);
+    67→  const [products, setProducts] = useState<Product[]>([]);
+    68→  const [loading, setLoading] = useState(true);
+    69→  const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
+    70→
+    71→  // Quick Add Dialog
+    72→  const [quickAddProduct, setQuickAddProduct] = useState<Product | null>(null);
+    73→  const [qaSize, setQaSize] = useState('Small');
+    74→  const [qaSugar, setQaSugar] = useState('100%');
+    75→  const [qaIce, setQaIce] = useState('Regular');
+    76→  const [qaTemp, setQaTemp] = useState('Cold');
+    77→  const [qaAddons, setQaAddons] = useState<{ name: string; price: number }[]>([]);
+    78→  const [qaQty, setQaQty] = useState(1);
+    79→  const [qaNotes, setQaNotes] = useState('');
+    80→  const [specialTab, setSpecialTab] = useState<string | null>(null); // 'favorites' | 'recent' | null
+    81→
+    82→  // Checkout
+    83→  const [checkoutPayment, setCheckoutPayment] = useState<PaymentMethod>('CASH');
+    84→  const [cashTendered, setCashTendered] = useState('');
+    85→  const [discountType, setDiscountType] = useState<DiscountType | ''>('');
+    86→  const [discountValue, setDiscountValue] = useState('');
+    87→  const [promoCode, setPromoCode] = useState('');
+    88→  const [customerSearch, setCustomerSearch] = useState('');
+    89→  const [customerResults, setCustomerResults] = useState<{ id: string; name: string; loyaltyPoints: number }[]>([]);
+    90→  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    91→  const [isCompleting, setIsCompleting] = useState(false);
+    92→  const [orderError, setOrderError] = useState('');
+    93→
+    94→  // Cart
+    95→  const [showHeldOrders, setShowHeldOrders] = useState(false);
+    96→  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+    97→
+    98→  // Stores
+    99→  const {
+   100→    cart, orderType, selectedCategoryId, appliedDiscount, selectedCustomer,
+   101→    heldOrders, addToCart, removeFromCart, updateCartQuantity, clearCart,
+   102→    setOrderType, setSelectedCategoryId, setAppliedDiscount, setSelectedCustomer,
+   103→    holdOrder, resumeOrder, removeHeldOrder,
+   104→    getSubtotal, getTax, getDiscountAmount, getTotal, getItemCount,
+   105→  } = usePOSStore();
+   106→
+   107→  const { searchQuery, isCheckoutOpen, isReceiptOpen, setCheckoutOpen, setReceiptOpen, currentReceiptOrder, setCurrentReceiptOrder } = useUIStore();
+   108→
+   109→  // ============ DATA FETCHING ============
+   110→  useEffect(() => {
+   111→    async function fetchData() {
+   112→      try {
+   113→        const [catRes, prodRes] = await Promise.all([
+   114→          fetch('/api/categories'),
+   115→          fetch('/api/products'),
+   116→        ]);
+   117→        if (catRes.ok) {
+   118→          const cats = await catRes.json();
+   119→          setCategories(cats.filter((c: Category) => c.isActive));
+   120→        }
+   121→        if (prodRes.ok) {
+   122→          const prods = await prodRes.json();
+   123→          setProducts(prods.filter((p: Product) => p.isAvailable));
+   124→        }
+   125→      } catch (e) {
+   126→        console.error('Failed to fetch POS data:', e);
+   127→      } finally {
+   128→        setLoading(false);
+   129→      }
+   130→    }
+   131→    fetchData();
+   132→  }, []);
+   133→
+   134→  // ============ DERIVED STATE ============
+   135→
+   136→  const categoryMap = useMemo(() => {
+   137→    const map = new Map<string, Category>();
+   138→    categories.forEach((c) => map.set(c.id, c));
+   139→    return map;
+   140→  }, [categories]);
+   141→
+   142→  const filteredProducts = useMemo(() => {
+   143→    let filtered = products;
+   144→
+   145→    // Special tabs
+   146→    if (specialTab === 'favorites') {
+   147→      filtered = filtered.filter((p) => p.isFavorite);
+   148→    } else if (specialTab === 'recent') {
+   149→      filtered = filtered.filter((p) => recentProductIds.includes(p.id));
+   150→    } else if (selectedCategoryId) {
+   151→      filtered = filtered.filter((p) => {
+   152→        try {
+   153→          const ids: string[] = JSON.parse(p.categoryIds);
+   154→          return ids.includes(selectedCategoryId);
+   155→        } catch {
+   156→          return false;
+   157→        }
+   158→      });
+   159→    }
+   160→
+   161→    // Search filter
+   162→    if (searchQuery.trim()) {
+   163→      const q = searchQuery.toLowerCase();
+   164→      filtered = filtered.filter(
+   165→        (p) =>
+   166→          p.name.toLowerCase().includes(q) ||
+   167→          p.sku.toLowerCase().includes(q) ||
+   168→          (p.barcode && p.barcode.toLowerCase().includes(q))
+   169→      );
+   170→    }
+   171→
+   172→    return filtered;
+   173→  }, [products, selectedCategoryId, searchQuery, specialTab, recentProductIds]);
+   174→
+   175→  const subtotal = getSubtotal();
+   176→  const discountAmount = getDiscountAmount();
+   177→  const tax = getTax();
+   178→  const total = getTotal();
+   179→  const itemCount = getItemCount();
+   180→
+   181→  const parsedAddons = useMemo(() => {
+   182→    if (!quickAddProduct?.addons) return [];
+   183→    try {
+   184→      return JSON.parse(quickAddProduct.addons) as { name: string; price: number; isDefault?: boolean }[];
+   185→    } catch {
+   186→      return [];
+   187→    }
+   188→  }, [quickAddProduct]);
+   189→
+   190→  const qaUnitPrice = useMemo(() => {
+   191→    if (!quickAddProduct) return 0;
+   192→    const base = quickAddProduct.sellingPrice;
+   193→    const sizeAdj = SIZE_PRICE_ADJ[qaSize] ?? 0;
+   194→    const addonTotal = qaAddons.reduce((s, a) => s + a.price, 0);
+   195→    return base + sizeAdj + addonTotal;
+   196→  }, [quickAddProduct, qaSize, qaAddons]);
+   197→
+   198→  // Checkout computed
+   199→  const checkoutSubtotal = subtotal;
+   200→  const checkoutDiscount = discountAmount;
+   201→  const checkoutTax = tax;
+   202→  const checkoutTotal = total;
+   203→
+   204→  const cashTenderedNum = parseFloat(cashTendered) || 0;
+   205→  const changeAmount = Math.max(0, Math.round((cashTenderedNum - checkoutTotal) * 100) / 100);
+   206→
+   207→  // ============ HANDLERS ============
+   208→
+   209→  const openQuickAdd = useCallback((product: Product) => {
+   210→    setQuickAddProduct(product);
+   211→    setQaSize('Small');
+   212→    setQaSugar('100%');
+   213→    setQaIce('Regular');
+   214→    setQaTemp(product.hasHotCold ? 'Cold' : '');
+   215→    setQaAddons(parsedAddons.filter((a) => a.isDefault).map((a) => ({ name: a.name, price: a.price })));
+   216→    setQaQty(1);
+   217→    setQaNotes('');
+   218→  }, [parsedAddons]);
+   219→
+   220→  const handleQuickAdd = useCallback(() => {
+   221→    if (!quickAddProduct) return;
+   222→    const item: CartItem = {
+   223→      tempId: crypto.randomUUID(),
+   224→      product: quickAddProduct,
+   225→      quantity: qaQty,
+   226→      size: quickAddProduct.sizeOptions ? qaSize : undefined,
+   227→      sizePriceAdj: quickAddProduct.sizeOptions ? (SIZE_PRICE_ADJ[qaSize] ?? 0) : undefined,
+   228→      sugarLevel: quickAddProduct.hasSugarLevel ? qaSugar : undefined,
+   229→      iceLevel: quickAddProduct.hasIceLevel ? qaIce : undefined,
+   230→      temperature: quickAddProduct.hasHotCold ? qaTemp : undefined,
+   231→      selectedAddons: qaAddons.length > 0 ? qaAddons : undefined,
+   232→      notes: qaNotes.trim() || undefined,
+   233→      unitPrice: qaUnitPrice,
+   234→      subtotal: qaUnitPrice * qaQty,
+   235→    };
+   236→    addToCart(item);
+   237→
+   238→    // Track recent
+   239→    setRecentProductIds((prev) => {
+   240→      const filtered = prev.filter((id) => id !== quickAddProduct.id);
+   241→      return [quickAddProduct.id, ...filtered].slice(0, 20);
+   242→    });
+   243→
+   244→    setQuickAddProduct(null);
+   245→    if (isMobile) setMobileCartOpen(true);
+   246→  }, [quickAddProduct, qaQty, qaSize, qaSugar, qaIce, qaTemp, qaAddons, qaNotes, qaUnitPrice, addToCart, isMobile]);
+   247→
+   248→  const toggleAddon = useCallback((name: string, price: number) => {
+   249→    setQaAddons((prev) => {
+   250→      const exists = prev.find((a) => a.name === name);
+   251→      if (exists) return prev.filter((a) => a.name !== name);
+   252→      return [...prev, { name, price }];
+   253→    });
+   254→  }, []);
+   255→
+   256→  const handleSelectCategory = useCallback((id: string | null) => {
+   257→    setSelectedCategoryId(id);
+   258→    setSpecialTab(null);
+   259→  }, [setSelectedCategoryId]);
+   260→
+   261→  const handleSpecialTab = useCallback((tab: string) => {
+   262→    setSpecialTab(specialTab === tab ? null : tab);
+   263→    setSelectedCategoryId(null);
+   264→  }, [specialTab, setSelectedCategoryId]);
+   265→
+   266→  // Auto-apply discount on change
+   267→  useEffect(() => {
+   268→    if (discountType) {
+   269→      const type = discountType as DiscountType;
+   270→      const val = parseFloat(discountValue) || 0;
+   271→      let amount = 0;
+   272→      if (type === 'PERCENTAGE' || type === 'SENIOR_CITIZEN' || type === 'PWD' || type === 'EMPLOYEE') {
+   273→        const pct = type === 'SENIOR_CITIZEN' || type === 'PWD' ? 20 : (type === 'EMPLOYEE' ? 15 : val);
+   274→        amount = Math.round(subtotal * (pct / 100) * 100) / 100;
+   275→      } else if (type === 'FIXED') {
+   276→        amount = Math.min(val, subtotal);
+   277→      } else if (type === 'PROMO' && promoCode.trim()) {
+   278→        amount = Math.round(subtotal * 0.1 * 100) / 100;
+   279→      }
+   280→      setAppliedDiscount({ type, value: val, code: type === 'PROMO' ? promoCode : undefined, amount });
+   281→    }
+   282→  }, [discountType, discountValue, promoCode, subtotal, setAppliedDiscount]);
+   283→
+   284→  const handleCompleteSale = useCallback(async () => {
+   285→    if (isCompleting) return;
+   286→    setOrderError('');
+   287→
+   288→    if (checkoutPayment === 'CASH' && cashTenderedNum < checkoutTotal) {
+   289→      setOrderError('Insufficient amount tendered');
+   290→      return;
+   291→    }
+   292→
+   293→    setIsCompleting(true);
+   294→    try {
+   295→      const orderNumber = generateOrderNumber();
+   296→      const body = {
+   297→        orderNumber,
+   298→        orderType,
+   299→        subtotal: checkoutSubtotal,
+   300→        discountAmount: checkoutDiscount,
+   301→        discountType: appliedDiscount?.type ?? null,
+   302→        taxAmount: checkoutTax,
+   303→        totalAmount: checkoutTotal,
+   304→        amountPaid: checkoutPayment === 'CASH' ? cashTenderedNum : checkoutTotal,
+   305→        changeAmount: checkoutPayment === 'CASH' ? changeAmount : 0,
+   306→        paymentMethod: checkoutPayment,
+   307→        customerId: selectedCustomer?.id ?? null,
+   308→        discountCode: appliedDiscount?.code ?? null,
+   309→        items: cart.map((item) => ({
+   310→          productId: item.product.id,
+   311→          productName: item.product.name,
+   312→          quantity: item.quantity,
+   313→          unitPrice: item.unitPrice,
+   314→          subtotal: item.subtotal,
+   315→          variant: item.variant ?? null,
+   316→          size: item.size ?? null,
+   317→          sugarLevel: item.sugarLevel ?? null,
+   318→          iceLevel: item.iceLevel ?? null,
+   319→          temperature: item.temperature ?? null,
+   320→          addons: item.selectedAddons ? JSON.stringify(item.selectedAddons) : null,
+   321→          notes: item.notes ?? null,
+   322→          costPrice: item.product.costPrice,
+   323→          profit: (item.unitPrice - item.product.costPrice) * item.quantity,
+   324→        })),
+   325→        payments: [{
+   326→          method: checkoutPayment,
+   327→          amount: checkoutPayment === 'CASH' ? cashTenderedNum : checkoutTotal,
+   328→        }],
+   329→      };
+   330→
+   331→      const res = await fetch('/api/orders', {
+   332→        method: 'POST',
+   333→        headers: { 'Content-Type': 'application/json' },
+   334→        body: JSON.stringify(body),
+   335→      });
+   336→
+   337→      if (!res.ok) throw new Error('Failed to create order');
+   338→
+   339→      const createdOrder = await res.json();
+   340→
+   341→      setCurrentReceiptOrder({
+   342→        ...createdOrder,
+   343→        items: cart.map((item) => ({
+   344→          id: '',
+   345→          orderId: createdOrder.id,
+   346→          productId: item.product.id,
+   347→          productName: item.product.name,
+   348→          quantity: item.quantity,
+   349→          unitPrice: item.unitPrice,
+   350→          subtotal: item.subtotal,
+   351→          variant: item.variant,
+   352→          size: item.size,
+   353→          sugarLevel: item.sugarLevel,
+   354→          iceLevel: item.iceLevel,
+   355→          temperature: item.temperature,
+   356→          addons: item.selectedAddons ? JSON.stringify(item.selectedAddons) : undefined,
+   357→          notes: item.notes,
+   358→          costPrice: item.product.costPrice,
+   359→          profit: (item.unitPrice - item.product.costPrice) * item.quantity,
+   360→          createdAt: new Date().toISOString(),
+   361→        })),
+   362→      } as unknown as Order);
+   363→
+   364→      clearCart();
+   365→      setCheckoutOpen(false);
+   366→      setReceiptOpen(true);
+   367→
+   368→      // Reset checkout state
+   369→      setCashTendered('');
+   370→      setDiscountType('');
+   371→      setDiscountValue('');
+   372→      setPromoCode('');
+   373→      setCustomerSearch('');
+   374→    } catch (e) {
+   375→      console.error('Order failed:', e);
+   376→      setOrderError('Failed to complete the sale. Please try again.');
+   377→    } finally {
+   378→      setIsCompleting(false);
+   379→    }
+   380→  }, [isCompleting, checkoutPayment, cashTenderedNum, checkoutTotal, orderType, checkoutSubtotal, checkoutDiscount, checkoutTax, selectedCustomer, appliedDiscount, cart, changeAmount, clearCart, setCheckoutOpen, setReceiptOpen, setCurrentReceiptOrder]);
+   381→
+   382→  const handleNewOrder = useCallback(() => {
+   383→    setReceiptOpen(false);
+   384→    setCurrentReceiptOrder(null);
+   385→  }, [setReceiptOpen, setCurrentReceiptOrder]);
+   386→
+   387→  const handlePrintReceipt = useCallback(() => {
+   388→    window.print();
+   389→  }, []);
+   390→
+   391→  const handlePauseOrder = useCallback(() => {
+   392→    if (cart.length === 0) return;
+   393→    holdOrder();
+   394→  }, [cart.length, holdOrder]);
+   395→
+   396→  const handleSearchCustomer = useCallback(async (query: string) => {
+   397→    setCustomerSearch(query);
+   398→    if (query.trim().length < 2) {
+   399→      setCustomerResults([]);
+   400→      setShowCustomerDropdown(false);
+   401→      return;
+   402→    }
+   403→    try {
+   404→      const res = await fetch(`/api/customers?search=${encodeURIComponent(query)}`);
+   405→      if (res.ok) {
+   406→        const data = await res.json();
+   407→        setCustomerResults(data.slice(0, 5).map((c: { id: string; name: string; loyaltyPoints: number }) => ({ id: c.id, name: c.name, loyaltyPoints: c.loyaltyPoints })));
+   408→        setShowCustomerDropdown(true);
+   409→      }
+   410→    } catch {
+   411→      // ignore
+   412→    }
+   413→  }, []);
+   414→
+   415→  const handleSelectCustomer = useCallback((customer: { id: string; name: string; loyaltyPoints: number }) => {
+   416→    setSelectedCustomer(customer);
+   417→    setCustomerSearch(customer.name);
+   418→    setShowCustomerDropdown(false);
+   419→  }, [setSelectedCustomer]);
+   420→
+   421→  // ============ ANIMATION VARIANTS ============
+   422→  const fadeIn = {
+   423→    initial: { opacity: 0, y: 8 },
+   424→    animate: { opacity: 1, y: 0 },
+   425→    exit: { opacity: 0, y: -8 },
+   426→  };
+   427→
+   428→  const scaleIn = {
+   429→    initial: { opacity: 0, scale: 0.95 },
+   430→    animate: { opacity: 1, scale: 1 },
+   431→    exit: { opacity: 0, scale: 0.95 },
+   432→  };
+   433→
+   434→  const slideUp = {
+   435→    initial: { opacity: 0, y: 40 },
+   436→    animate: { opacity: 1, y: 0 },
+   437→    exit: { opacity: 0, y: 40 },
+   438→  };
+   439→
+   440→  const cartItemVariants = {
+   441→    initial: { opacity: 0, x: 20, height: 0 },
+   442→    animate: { opacity: 1, x: 0, height: 'auto' },
+   443→    exit: { opacity: 0, x: -20, height: 0 },
+   444→  };
+   445→
+   446→  // ============ RENDER HELPERS ============
+   447→
+   448→  function renderProductCard(product: Product, idx: number) {
+   449→    const catIds: string[] = JSON.parse(product.categoryIds || '[]');
+   450→    const firstCat = catIds.length > 0 ? categoryMap.get(catIds[0]) : null;
+   451→    const emoji = firstCat ? getCategoryEmoji(firstCat.name) : getCategoryEmoji(product.name);
+   452→    const hasSizes = !!product.sizeOptions;
+   453→
+   454→    return (
+   455→      <motion.div
+   456→        key={product.id}
+   457→        className="pos-product-card premium-card p-3 flex flex-col items-center justify-center gap-1.5 min-h-[90px] md:min-h-[100px]"
+   458→        onClick={() => openQuickAdd(product)}
+   459→        initial={{ opacity: 0, scale: 0.9 }}
+   460→        animate={{ opacity: 1, scale: 1 }}
+   461→        transition={{ delay: idx * 0.02, duration: 0.2 }}
+   462→        whileHover={{ scale: 1.03 }}
+   463→        whileTap={{ scale: 0.97 }}
+   464→      >
+   465→        {product.imageUrl ? (
+   466→          <div className="w-8 h-8 rounded-full overflow-hidden">
+   467→            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+   468→          </div>
+   469→        ) : (
+   470→          <div
+   471→            className="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+   472→            style={{ background: firstCat?.color ? `${firstCat.color}33` : 'rgba(196,138,58,0.15)' }}
+   473→          >
+   474→            {emoji}
+   475→          </div>
+   476→        )}
+   477→        <span className="text-xs md:text-sm font-medium text-white/90 text-center leading-tight line-clamp-2 px-0.5">
+   478→          {product.name}
+   479→        </span>
+   480→        <span className="text-[#C48A3A] font-bold text-xs md:text-sm">
+   481→          {formatCurrency(product.sellingPrice)}
+   482→        </span>
+   483→        {hasSizes && (
+   484→          <span className="text-[9px] text-white/40 font-medium tracking-wider uppercase">S / M / L</span>
+   485→        )}
+   486→      </motion.div>
+   487→    );
+   488→  }
+   489→
+   490→  function renderCategoriesBar() {
+   491→    return (
+   492→      <div className="flex gap-2 overflow-x-auto pb-1 px-1 scrollbar-thin">
+   493→        {/* Special tabs */}
+   494→        <motion.button
+   495→          key="__all"
+   496→          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+   497→            !selectedCategoryId && !specialTab
+   498→              ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] shadow-lg shadow-[#C48A3A]/20'
+   499→              : 'glass-subtle text-white/70 hover:text-white/90 hover:bg-white/[0.06]'
+   500→          }`}
+   501→          onClick={() => { handleSelectCategory(null); setSpecialTab(null); }}
+   502→          whileTap={{ scale: 0.95 }}
+   503→        >
+   504→          All
+   505→        </motion.button>
+   506→
+   507→        <motion.button
+   508→          key="__favorites"
+   509→          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all duration-200 ${
+   510→            specialTab === 'favorites'
+   511→              ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] shadow-lg shadow-[#C48A3A]/20'
+   512→              : 'glass-subtle text-white/70 hover:text-white/90 hover:bg-white/[0.06]'
+   513→          }`}
+   514→          onClick={() => handleSpecialTab('favorites')}
+   515→          whileTap={{ scale: 0.95 }}
+   516→        >
+   517→          <Heart className="w-3 h-3" fill={specialTab === 'favorites' ? '#111111' : 'none'} />
+   518→          Favorites
+   519→        </motion.button>
+   520→
+   521→        <motion.button
+   522→          key="__recent"
+   523→          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all duration-200 ${
+   524→            specialTab === 'recent'
+   525→              ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] shadow-lg shadow-[#C48A3A]/20'
+   526→              : 'glass-subtle text-white/70 hover:text-white/90 hover:bg-white/[0.06]'
+   527→          }`}
+   528→          onClick={() => handleSpecialTab('recent')}
+   529→          whileTap={{ scale: 0.95 }}
+   530→        >
+   531→          <Clock className="w-3 h-3" />
+   532→          Recent
+   533→        </motion.button>
+   534→
+   535→        <div className="w-px h-6 bg-white/10 self-center flex-shrink-0 mx-1" />
+   536→
+   537→        {categories.map((cat) => (
+   538→          <motion.button
+   539→            key={cat.id}
+   540→            className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all duration-200 ${
+   541→              selectedCategoryId === cat.id
+   542→                ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] shadow-lg shadow-[#C48A3A]/20'
+   543→                : 'glass-subtle text-white/70 hover:text-white/90 hover:bg-white/[0.06]'
+   544→            }`}
+   545→            onClick={() => handleSelectCategory(cat.id)}
+   546→            whileTap={{ scale: 0.95 }}
+   547→          >
+   548→            <span>{getCategoryEmoji(cat.name)}</span>
+   549→            {cat.name}
+   550→          </motion.button>
+   551→        ))}
+   552→      </div>
+   553→    );
+   554→  }
+   555→
+   556→  function renderMobileSearch() {
+   557→    return (
+   558→      <div className="md:hidden relative mb-2">
+   559→        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+   560→        <input
+   561→          type="text"
+   562→          placeholder="Search products..."
+   563→          value={searchQuery}
+   564→          onChange={(e) => useUIStore.getState().setSearchQuery(e.target.value)}
+   565→          className="w-full glass-subtle rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+   566→        />
+   567→        {searchQuery && (
+   568→          <button
+   569→            onClick={() => useUIStore.getState().setSearchQuery('')}
+   570→            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+   571→          >
+   572→            <X className="w-4 h-4" />
+   573→          </button>
+   574→        )}
+   575→      </div>
+   576→    );
+   577→  }
+   578→
+   579→  function renderProductGrid() {
+   580→    if (loading) {
+   581→      return (
+   582→        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 p-1">
+   583→          {Array.from({ length: 8 }).map((_, i) => (
+   584→            <div key={i} className="premium-card p-3 min-h-[90px] md:min-h-[100px] animate-shimmer" />
+   585→          ))}
+   586→        </div>
+   587→      );
+   588→    }
+   589→
+   590→    if (filteredProducts.length === 0) {
+   591→      return (
+   592→        <motion.div
+   593→          className="flex flex-col items-center justify-center h-64 text-white/30"
+   594→          initial={{ opacity: 0 }}
+   595→          animate={{ opacity: 1 }}
+   596→        >
+   597→          <Search className="w-12 h-12 mb-3 opacity-50" />
+   598→          <p className="text-sm font-medium">No products found</p>
+   599→          <p className="text-xs mt-1">Try a different search or category</p>
+   600→        </motion.div>
+   601→      );
+   602→    }
+   603→
+   604→    return (
+   605→      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 p-1 overflow-y-auto flex-1 pr-1" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+   606→        <AnimatePresence mode="popLayout">
+   607→          {filteredProducts.map((product, idx) => renderProductCard(product, idx))}
+   608→        </AnimatePresence>
+   609→      </div>
+   610→    );
+   611→  }
+   612→
+   613→  function renderOrderTypeSelector() {
+   614→    return (
+   615→      <div className="flex gap-1 p-1 glass-subtle rounded-xl">
+   616→        {ORDER_TYPES.map((ot) => (
+   617→          <button
+   618→            key={ot.value}
+   619→            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+   620→              orderType === ot.value
+   621→                ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+   622→                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.04]'
+   623→            }`}
+   624→            onClick={() => setOrderType(ot.value)}
+   625→          >
+   626→            {ORDER_TYPE_ICONS[ot.value]}
+   627→            <span className="hidden sm:inline">{ot.label}</span>
+   628→          </button>
+   629→        ))}
+   630→      </div>
+   631→    );
+   632→  }
+   633→
+   634→  function renderCartItem(item: CartItem) {
+   635→    const variantParts: string[] = [];
+   636→    if (item.size) variantParts.push(item.size);
+   637→    if (item.temperature) variantParts.push(item.temperature);
+   638→    if (item.sugarLevel) variantParts.push(`Sugar ${item.sugarLevel}`);
+   639→    if (item.iceLevel) variantParts.push(item.iceLevel);
+   640→    if (item.selectedAddons?.length) variantParts.push(`+${item.selectedAddons.map(a => a.name).join(', ')}`);
+   641→
+   642→    return (
+   643→      <motion.div
+   644→        key={item.tempId}
+   645→        layout
+   646→        variants={cartItemVariants}
+   647→        initial="initial"
+   648→        animate="animate"
+   649→        exit="exit"
+   650→        transition={{ duration: 0.2 }}
+   651→        className="glass-subtle rounded-xl p-3 group"
+   652→      >
+   653→        <div className="flex items-start gap-2">
+   654→          <div className="flex-1 min-w-0">
+   655→            <p className="text-sm font-medium text-white/90 truncate">{item.product.name}</p>
+   656→            {variantParts.length > 0 && (
+   657→              <p className="text-[10px] text-white/40 mt-0.5 truncate">{variantParts.join(' · ')}</p>
+   658→            )}
+   659→            {item.notes && (
+   660→              <p className="text-[10px] text-[#C48A3A]/70 mt-0.5 truncate italic">📝 {item.notes}</p>
+   661→            )}
+   662→          </div>
+   663→          <div className="flex flex-col items-end gap-1">
+   664→            <span className="text-xs font-bold text-[#C48A3A]">{formatCurrency(item.subtotal)}</span>
+   665→            <button
+   666→              onClick={() => removeFromCart(item.tempId)}
+   667→              className="opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400"
+   668→            >
+   669→              <X className="w-3.5 h-3.5" />
+   670→            </button>
+   671→          </div>
+   672→        </div>
+   673→        <div className="flex items-center justify-between mt-2">
+   674→          <span className="text-[10px] text-white/30">{formatCurrency(item.unitPrice)} ea.</span>
+   675→          <div className="flex items-center gap-1">
+   676→            <button
+   677→              onClick={() => updateCartQuantity(item.tempId, item.quantity - 1)}
+   678→              className="w-6 h-6 rounded-lg glass-subtle flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+   679→            >
+   680→              <Minus className="w-3 h-3" />
+   681→            </button>
+   682→            <span className="w-7 text-center text-xs font-bold text-white">{item.quantity}</span>
+   683→            <button
+   684→              onClick={() => updateCartQuantity(item.tempId, item.quantity + 1)}
+   685→              className="w-6 h-6 rounded-lg glass-subtle flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+   686→            >
+   687→              <Plus className="w-3 h-3" />
+   688→            </button>
+   689→          </div>
+   690→        </div>
+   691→      </motion.div>
+   692→    );
+   693→  }
+   694→
+   695→  function renderCartPanel() {
+   696→    return (
+   697→      <div className="flex flex-col h-full">
+   698→        {/* Header */}
+   699→        <div className="flex items-center justify-between mb-3">
+   700→          <div className="flex items-center gap-2">
+   701→            <h2 className="text-sm font-bold text-white">Current Order</h2>
+   702→            {itemCount > 0 && (
+   703→              <span className="bg-[#C48A3A] text-[#111111] text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+   704→                {itemCount}
+   705→              </span>
+   706→            )}
+   707→          </div>
+   708→          {isMobile && (
+   709→            <button onClick={() => setMobileCartOpen(false)} className="text-white/40 hover:text-white/70">
+   710→              <X className="w-5 h-5" />
+   711→            </button>
+   712→          )}
+   713→        </div>
+   714→
+   715→        {/* Order Type */}
+   716→        {renderOrderTypeSelector()}
+   717→
+   718→        {/* Selected Customer */}
+   719→        {selectedCustomer && (
+   720→          <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 glass-subtle rounded-lg text-xs">
+   721→            <User className="w-3 h-3 text-[#C48A3A]" />
+   722→            <span className="text-white/70">{selectedCustomer.name}</span>
+   723→            <button onClick={() => setSelectedCustomer(null)} className="ml-auto text-white/30 hover:text-white/60">
+   724→              <X className="w-3 h-3" />
+   725→            </button>
+   726→          </div>
+   727→        )}
+   728→
+   729→        {/* Cart Items */}
+   730→        <div className="flex-1 overflow-y-auto mt-3 space-y-2 min-h-0" style={{ maxHeight: isMobile ? '40vh' : 'calc(100vh - 480px)' }}>
+   731→          <AnimatePresence mode="popLayout">
+   732→            {cart.map(renderCartItem)}
+   733→          </AnimatePresence>
+   734→          {cart.length === 0 && (
+   735→            <motion.div
+   736→              className="flex flex-col items-center justify-center h-32 text-white/20"
+   737→              initial={{ opacity: 0 }}
+   738→              animate={{ opacity: 1 }}
+   739→            >
+   740→              <ShoppingBag className="w-10 h-10 mb-2" />
+   741→              <p className="text-xs">Cart is empty</p>
+   742→            </motion.div>
+   743→          )}
+   744→        </div>
+   745→
+   746→        {/* Held Orders */}
+   747→        {heldOrders.length > 0 && (
+   748→          <div className="mt-2">
+   749→            <button
+   750→              onClick={() => setShowHeldOrders(!showHeldOrders)}
+   751→              className="w-full flex items-center justify-between px-3 py-2 glass-subtle rounded-xl text-xs text-white/60 hover:text-white/80 transition-colors"
+   752→            >
+   753→              <span className="flex items-center gap-1.5">
+   754→                <Pause className="w-3.5 h-3.5" />
+   755→                Held Orders ({heldOrders.length})
+   756→              </span>
+   757→              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showHeldOrders ? 'rotate-180' : ''}`} />
+   758→            </button>
+   759→            <AnimatePresence>
+   760→              {showHeldOrders && (
+   761→                <motion.div
+   762→                  initial={{ height: 0, opacity: 0 }}
+   763→                  animate={{ height: 'auto', opacity: 1 }}
+   764→                  exit={{ height: 0, opacity: 0 }}
+   765→                  className="overflow-hidden"
+   766→                >
+   767→                  <div className="mt-1.5 space-y-1.5 max-h-32 overflow-y-auto">
+   768→                    {heldOrders.map((held) => (
+   769→                      <div key={held.id} className="flex items-center justify-between px-3 py-2 glass-subtle rounded-lg text-xs">
+   770→                        <div className="flex-1 min-w-0">
+   771→                          <p className="text-white/70 truncate">
+   772→                            {held.cart.length} item{held.cart.length > 1 ? 's' : ''} · {ORDER_TYPES.find(o => o.value === held.orderType)?.label}
+   773→                          </p>
+   774→                          <p className="text-white/30 text-[10px]">
+   775→                            {new Date(held.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+   776→                          </p>
+   777→                        </div>
+   778→                        <div className="flex items-center gap-1">
+   779→                          <button
+   780→                            onClick={() => resumeOrder(held.id)}
+   781→                            className="p-1.5 rounded-md hover:bg-[#C48A3A]/20 text-[#C48A3A] transition-colors"
+   782→                            title="Resume"
+   783→                          >
+   784→                            <Play className="w-3.5 h-3.5" />
+   785→                          </button>
+   786→                          <button
+   787→                            onClick={() => removeHeldOrder(held.id)}
+   788→                            className="p-1.5 rounded-md hover:bg-red-500/20 text-red-400/60 hover:text-red-400 transition-colors"
+   789→                            title="Delete"
+   790→                          >
+   791→                            <Trash2 className="w-3.5 h-3.5" />
+   792→                          </button>
+   793→                        </div>
+   794→                      </div>
+   795→                    ))}
+   796→                  </div>
+   797→                </motion.div>
+   798→              )}
+   799→            </AnimatePresence>
+   800→          </div>
+   801→        )}
+   802→
+   803→        {/* Totals */}
+   804→        <div className="mt-3 space-y-1.5 pt-3 border-t border-white/[0.06]">
+   805→          <div className="flex justify-between text-xs text-white/50">
+   806→            <span>Subtotal</span>
+   807→            <span>{formatCurrency(subtotal)}</span>
+   808→          </div>
+   809→          {discountAmount > 0 && (
+   810→            <div className="flex justify-between text-xs text-emerald-400">
+   811→              <span className="flex items-center gap-1">
+   812→                <BadgePercent className="w-3 h-3" />
+   813→                Discount ({appliedDiscount?.type === 'PERCENTAGE' ? `${appliedDiscount.value}%` : appliedDiscount?.type})
+   814→              </span>
+   815→              <span>-{formatCurrency(discountAmount)}</span>
+   816→            </div>
+   817→          )}
+   818→          <div className="flex justify-between text-xs text-white/50">
+   819→            <span>Tax (12%)</span>
+   820→            <span>{formatCurrency(tax)}</span>
+   821→          </div>
+   822→          <div className="flex justify-between text-base font-bold text-white pt-1">
+   823→            <span>Total</span>
+   824→            <span className="text-[#C48A3A]">{formatCurrency(total)}</span>
+   825→          </div>
+   826→        </div>
+   827→
+   828→        {/* Actions */}
+   829→        <div className="mt-3 space-y-2">
+   830→          <button
+   831→            onClick={handlePauseOrder}
+   832→            disabled={cart.length === 0}
+   833→            className="w-full py-2.5 rounded-xl glass-subtle text-xs font-medium text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+   834→          >
+   835→            <Pause className="w-3.5 h-3.5" />
+   836→            Pause Order
+   837→          </button>
+   838→          <motion.button
+   839→            onClick={() => {
+   840→              if (cart.length > 0) setCheckoutOpen(true);
+   841→            }}
+   842→            disabled={cart.length === 0}
+   843→            className="w-full py-3 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm hover:shadow-lg hover:shadow-[#C48A3A]/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:shadow-none"
+   844→            whileHover={cart.length > 0 ? { scale: 1.01 } : {}}
+   845→            whileTap={cart.length > 0 ? { scale: 0.99 } : {}}
+   846→          >
+   847→            Checkout · {formatCurrency(total)}
+   848→          </motion.button>
+   849→        </div>
+   850→      </div>
+   851→    );
+   852→  }
+   853→
+   854→  function renderMobileCartButton() {
+   855→    if (cart.length === 0) return null;
+   856→    return (
+   857→      <motion.button
+   858→        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm shadow-xl shadow-[#C48A3A]/30"
+   859→        onClick={() => setMobileCartOpen(true)}
+   860→        initial={{ scale: 0, opacity: 0 }}
+   861→        animate={{ scale: 1, opacity: 1 }}
+   862→        exit={{ scale: 0, opacity: 0 }}
+   863→        whileHover={{ scale: 1.05 }}
+   864→        whileTap={{ scale: 0.95 }}
+   865→      >
+   866→        <ShoppingBag className="w-5 h-5" />
+   867→        <span>{itemCount}</span>
+   868→        <span className="text-[#111111]/70">·</span>
+   869→        <span>{formatCurrency(total)}</span>
+   870→      </motion.button>
+   871→    );
+   872→  }
+   873→
+   874→  function renderMobileCartSheet() {
+   875→    if (!isMobile) return null;
+   876→    return (
+   877→      <AnimatePresence>
+   878→        {mobileCartOpen && (
+   879→          <>
+   880→            <motion.div
+   881→              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+   882→              initial={{ opacity: 0 }}
+   883→              animate={{ opacity: 1 }}
+   884→              exit={{ opacity: 0 }}
+   885→              onClick={() => setMobileCartOpen(false)}
+   886→            />
+   887→            <motion.div
+   888→              className="fixed bottom-0 left-0 right-0 z-50 glass-strong rounded-t-3xl max-h-[85vh] overflow-y-auto p-4"
+   889→              initial={{ y: '100%' }}
+   890→              animate={{ y: 0 }}
+   891→              exit={{ y: '100%' }}
+   892→              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+   893→            >
+   894→              {renderCartPanel()}
+   895→            </motion.div>
+   896→          </>
+   897→        )}
+   898→      </AnimatePresence>
+   899→    );
+   900→  }
+   901→
+   902→  // ============ QUICK ADD DIALOG ============
+   903→  function renderQuickAddDialog() {
+   904→    if (!quickAddProduct) return null;
+   905→
+   906→    return (
+   907→      <motion.div
+   908→        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+   909→        initial={{ opacity: 0 }}
+   910→        animate={{ opacity: 1 }}
+   911→        exit={{ opacity: 0 }}
+   912→      >
+   913→        <motion.div
+   914→          className="absolute inset-0 bg-black/70 backdrop-blur-md"
+   915→          onClick={() => setQuickAddProduct(null)}
+   916→          initial={{ opacity: 0 }}
+   917→          animate={{ opacity: 1 }}
+   918→          exit={{ opacity: 0 }}
+   919→        />
+   920→        <motion.div
+   921→          className="relative z-10 w-full sm:max-w-md sm:rounded-2xl glass-strong rounded-t-3xl max-h-[90vh] overflow-y-auto"
+   922→          initial={isMobile ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
+   923→          animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1 }}
+   924→          exit={isMobile ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
+   925→          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+   926→        >
+   927→          <div className="p-5">
+   928→            {/* Header */}
+   929→            <div className="flex items-center justify-between mb-4">
+   930→              <div className="flex items-center gap-3">
+   931→                <div className="w-10 h-10 rounded-xl bg-[#C48A3A]/15 flex items-center justify-center text-lg">
+   932→                  {getCategoryEmoji(quickAddProduct.name)}
+   933→                </div>
+   934→                <div>
+   935→                  <h3 className="text-base font-bold text-white">{quickAddProduct.name}</h3>
+   936→                  <p className="text-xs text-white/40">{formatCurrency(quickAddProduct.sellingPrice)}</p>
+   937→                </div>
+   938→              </div>
+   939→              <button
+   940→                onClick={() => setQuickAddProduct(null)}
+   941→                className="w-8 h-8 rounded-lg glass-subtle flex items-center justify-center text-white/40 hover:text-white transition-colors"
+   942→              >
+   943→                <X className="w-4 h-4" />
+   944→              </button>
+   945→            </div>
+   946→
+   947→            {/* Size Selection */}
+   948→            {quickAddProduct.sizeOptions && (
+   949→              <div className="mb-4">
+   950→                <label className="text-xs font-medium text-white/50 mb-2 block">Size</label>
+   951→                <div className="flex gap-2">
+   952→                  {SIZES.map((size) => (
+   953→                    <button
+   954→                      key={size}
+   955→                      onClick={() => setQaSize(size)}
+   956→                      className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+   957→                        qaSize === size
+   958→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+   959→                          : 'glass-subtle text-white/60 hover:text-white/90'
+   960→                      }`}
+   961→                    >
+   962→                      {size}
+   963→                      {SIZE_PRICE_ADJ[size] > 0 && (
+   964→                        <span className="block text-[10px] mt-0.5 opacity-70">+{formatCurrency(SIZE_PRICE_ADJ[size])}</span>
+   965→                      )}
+   966→                    </button>
+   967→                  ))}
+   968→                </div>
+   969→              </div>
+   970→            )}
+   971→
+   972→            {/* Temperature (Hot/Cold) */}
+   973→            {quickAddProduct.hasHotCold && (
+   974→              <div className="mb-4">
+   975→                <label className="text-xs font-medium text-white/50 mb-2 block">Temperature</label>
+   976→                <div className="flex gap-2">
+   977→                  {TEMPERATURES.map((temp) => (
+   978→                    <button
+   979→                      key={temp}
+   980→                      onClick={() => setQaTemp(temp)}
+   981→                      className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+   982→                        qaTemp === temp
+   983→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+   984→                          : 'glass-subtle text-white/60 hover:text-white/90'
+   985→                      }`}
+   986→                    >
+   987→                      {temp === 'Hot' ? '🔥' : '🧊'} {temp}
+   988→                    </button>
+   989→                  ))}
+   990→                </div>
+   991→              </div>
+   992→            )}
+   993→
+   994→            {/* Sugar Level */}
+   995→            {quickAddProduct.hasSugarLevel && (
+   996→              <div className="mb-4">
+   997→                <label className="text-xs font-medium text-white/50 mb-2 block">Sugar Level</label>
+   998→                <div className="flex gap-1.5 flex-wrap">
+   999→                  {SUGAR_LEVELS.map((level) => (
+  1000→                    <button
+  1001→                      key={level}
+  1002→                      onClick={() => setQaSugar(level)}
+  1003→                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+  1004→                        qaSugar === level
+  1005→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1006→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1007→                      }`}
+  1008→                    >
+  1009→                      {level}
+  1010→                    </button>
+  1011→                  ))}
+  1012→                </div>
+  1013→              </div>
+  1014→            )}
+  1015→
+  1016→            {/* Ice Level */}
+  1017→            {quickAddProduct.hasIceLevel && (
+  1018→              <div className="mb-4">
+  1019→                <label className="text-xs font-medium text-white/50 mb-2 block">Ice Level</label>
+  1020→                <div className="flex gap-1.5 flex-wrap">
+  1021→                  {ICE_LEVELS.map((level) => (
+  1022→                    <button
+  1023→                      key={level}
+  1024→                      onClick={() => setQaIce(level)}
+  1025→                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+  1026→                        qaIce === level
+  1027→                          ? 'bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111]'
+  1028→                          : 'glass-subtle text-white/60 hover:text-white/90'
+  1029→                      }`}
+  1030→                    >
+  1031→                      {level}
+  1032→                    </button>
+  1033→                  ))}
+  1034→                </div>
+  1035→              </div>
+  1036→            )}
+  1037→
+  1038→            {/* Addons */}
+  1039→            {parsedAddons.length > 0 && (
+  1040→              <div className="mb-4">
+  1041→                <label className="text-xs font-medium text-white/50 mb-2 block">Add-ons</label>
+  1042→                <div className="space-y-1.5">
+  1043→                  {parsedAddons.map((addon) => {
+  1044→                    const isSelected = qaAddons.some((a) => a.name === addon.name);
+  1045→                    return (
+  1046→                      <button
+  1047→                        key={addon.name}
+  1048→                        onClick={() => toggleAddon(addon.name, addon.price)}
+  1049→                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-200 ${
+  1050→                          isSelected
+  1051→                            ? 'glass bg-[#C48A3A]/10 border-[#C48A3A]/30'
+  1052→                            : 'glass-subtle text-white/60 hover:text-white/80'
+  1053→                        }`}
+  1054→                      >
+  1055→                        <div className="flex items-center gap-2">
+  1056→                          <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+  1057→                            isSelected ? 'bg-[#C48A3A] border-[#C48A3A]' : 'border-white/20'
+  1058→                          }`}>
+  1059→                            {isSelected && <Check className="w-3 h-3 text-[#111111]" />}
+  1060→                          </div>
+  1061→                          <span className={isSelected ? 'text-white' : ''}>{addon.name}</span>
+  1062→                        </div>
+  1063→                        <span className="text-[#C48A3A] text-[11px]">+{formatCurrency(addon.price)}</span>
+  1064→                      </button>
+  1065→                    );
+  1066→                  })}
+  1067→                </div>
+  1068→              </div>
+  1069→            )}
+  1070→
+  1071→            {/* Notes */}
+  1072→            <div className="mb-4">
+  1073→              <label className="text-xs font-medium text-white/50 mb-2 block">Notes</label>
+  1074→              <input
+  1075→                type="text"
+  1076→                value={qaNotes}
+  1077→                onChange={(e) => setQaNotes(e.target.value)}
+  1078→                placeholder="Special instructions..."
+  1079→                className="w-full glass-subtle rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1080→              />
+  1081→            </div>
+  1082→
+  1083→            {/* Quantity + Add to Cart */}
+  1084→            <div className="flex items-center gap-3">
+  1085→              <div className="flex items-center gap-2 glass-subtle rounded-xl p-1">
+  1086→                <button
+  1087→                  onClick={() => setQaQty(Math.max(1, qaQty - 1))}
+  1088→                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+  1089→                >
+  1090→                  <Minus className="w-4 h-4" />
+  1091→                </button>
+  1092→                <span className="w-8 text-center text-base font-bold text-white">{qaQty}</span>
+  1093→                <button
+  1094→                  onClick={() => setQaQty(qaQty + 1)}
+  1095→                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+  1096→                >
+  1097→                  <Plus className="w-4 h-4" />
+  1098→                </button>
+  1099→              </div>
+  1100→              <motion.button
+  1101→                onClick={handleQuickAdd}
+  1102→                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm flex items-center justify-center gap-2"
+  1103→                whileHover={{ scale: 1.02 }}
+  1104→                whileTap={{ scale: 0.98 }}
+  1105→              >
+  1106→                <Plus className="w-4 h-4" />
+  1107→                Add to Cart · {formatCurrency(qaUnitPrice * qaQty)}
+  1108→              </motion.button>
+  1109→            </div>
+  1110→          </div>
+  1111→        </motion.div>
+  1112→      </motion.div>
+  1113→    );
+  1114→  }
+  1115→
+  1116→  // ============ CHECKOUT DIALOG ============
+  1117→  function renderCheckoutDialog() {
+  1118→    if (!isCheckoutOpen) return null;
+  1119→
+  1120→    return (
+  1121→      <motion.div
+  1122→        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+  1123→        initial={{ opacity: 0 }}
+  1124→        animate={{ opacity: 1 }}
+  1125→        exit={{ opacity: 0 }}
+  1126→      >
+  1127→        <motion.div
+  1128→          className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+  1129→          onClick={() => setCheckoutOpen(false)}
+  1130→          initial={{ opacity: 0 }}
+  1131→          animate={{ opacity: 1 }}
+  1132→          exit={{ opacity: 0 }}
+  1133→        />
+  1134→
+  1135→        <motion.div
+  1136→          className="relative z-10 w-full max-w-2xl glass-strong rounded-2xl overflow-hidden max-h-[95vh] flex flex-col"
+  1137→          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+  1138→          animate={{ scale: 1, opacity: 1, y: 0 }}
+  1139→          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+  1140→          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+  1141→        >
+  1142→          {/* Header */}
+  1143→          <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+  1144→            <h2 className="text-lg font-bold text-white">Checkout</h2>
+  1145→            <button
+  1146→              onClick={() => setCheckoutOpen(false)}
+  1147→              className="w-8 h-8 rounded-lg glass-subtle flex items-center justify-center text-white/40 hover:text-white transition-colors"
+  1148→            >
+  1149→              <X className="w-4 h-4" />
+  1150→            </button>
+  1151→          </div>
+  1152→
+  1153→          <div className="overflow-y-auto flex-1 p-4 space-y-5">
+  1154→            {/* Order Summary */}
+  1155→            <div>
+  1156→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Order Summary</h3>
+  1157→              <div className="glass-subtle rounded-xl overflow-hidden">
+  1158→                <div className="max-h-36 overflow-y-auto">
+  1159→                  {cart.map((item) => (
+  1160→                    <div key={item.tempId} className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04] last:border-0">
+  1161→                      <div className="flex-1 min-w-0">
+  1162→                        <p className="text-xs text-white/80 truncate">
+  1163→                          {item.quantity}x {item.product.name}
+  1164→                          {item.size && <span className="text-white/40"> ({item.size})</span>}
+  1165→                        </p>
+  1166→                      </div>
+  1167→                      <span className="text-xs text-white/60 ml-2 flex-shrink-0">{formatCurrency(item.subtotal)}</span>
+  1168→                    </div>
+  1169→                  ))}
+  1170→                </div>
+  1171→                <div className="px-3 py-2 bg-white/[0.02] space-y-1">
+  1172→                  <div className="flex justify-between text-xs text-white/50">
+  1173→                    <span>Subtotal</span>
+  1174→                    <span>{formatCurrency(checkoutSubtotal)}</span>
+  1175→                  </div>
+  1176→                  {checkoutDiscount > 0 && (
+  1177→                    <div className="flex justify-between text-xs text-emerald-400">
+  1178→                      <span>Discount</span>
+  1179→                      <span>-{formatCurrency(checkoutDiscount)}</span>
+  1180→                    </div>
+  1181→                  )}
+  1182→                  <div className="flex justify-between text-xs text-white/50">
+  1183→                    <span>Tax (12%)</span>
+  1184→                    <span>{formatCurrency(checkoutTax)}</span>
+  1185→                  </div>
+  1186→                  <div className="flex justify-between text-sm font-bold text-white pt-1 border-t border-white/[0.06]">
+  1187→                    <span>Total</span>
+  1188→                    <span className="text-[#C48A3A]">{formatCurrency(checkoutTotal)}</span>
+  1189→                  </div>
+  1190→                </div>
+  1191→              </div>
+  1192→            </div>
+  1193→
+  1194→            {/* Payment Method */}
+  1195→            <div>
+  1196→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Payment Method</h3>
+  1197→              <div className="grid grid-cols-4 gap-2">
+  1198→                {PAYMENT_METHODS.map((pm) => (
+  1199→                  <button
+  1200→                    key={pm.value}
+  1201→                    onClick={() => setCheckoutPayment(pm.value as PaymentMethod)}
+  1202→                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-all duration-200 ${
+  1203→                      checkoutPayment === pm.value
+  1204→                        ? 'glass bg-[#C48A3A]/15 border-[#C48A3A]/40 text-[#C48A3A]'
+  1205→                        : 'glass-subtle text-white/50 hover:text-white/80 hover:bg-white/[0.06]'
+  1206→                    }`}
+  1207→                  >
+  1208→                    {PAYMENT_ICONS[pm.value]}
+  1209→                    <span className="text-[10px] leading-tight text-center">{pm.label}</span>
+  1210→                  </button>
+  1211→                ))}
+  1212→              </div>
+  1213→            </div>
+  1214→
+  1215→            {/* Cash Amount */}
+  1216→            {checkoutPayment === 'CASH' && (
+  1217→              <motion.div
+  1218→                initial={{ opacity: 0, height: 0 }}
+  1219→                animate={{ opacity: 1, height: 'auto' }}
+  1220→                exit={{ opacity: 0, height: 0 }}
+  1221→              >
+  1222→                <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Amount Tendered</h3>
+  1223→                <div className="glass-subtle rounded-xl p-3 space-y-2">
+  1224→                  <input
+  1225→                    type="number"
+  1226→                    value={cashTendered}
+  1227→                    onChange={(e) => setCashTendered(e.target.value)}
+  1228→                    placeholder="Enter amount..."
+  1229→                    className="w-full bg-transparent text-lg font-bold text-white placeholder:text-white/20 focus:outline-none"
+  1230→                    autoFocus
+  1231→                  />
+  1232→                  {/* Quick amount buttons */}
+  1233→                  <div className="flex gap-1.5 flex-wrap">
+  1234→                    {[50, 100, 200, 500, 1000].map((amt) => (
+  1235→                      <button
+  1236→                        key={amt}
+  1237→                        onClick={() => setCashTendered(String(amt))}
+  1238→                        className="px-3 py-1 rounded-lg glass-subtle text-[10px] text-white/50 hover:text-white hover:bg-[#C48A3A]/20 hover:text-[#C48A3A] transition-colors"
+  1239→                      >
+  1240→                        {formatCurrency(amt)}
+  1241→                      </button>
+  1242→                    ))}
+  1243→                    <button
+  1244→                      onClick={() => setCashTendered(String(Math.ceil(checkoutTotal)))}
+  1245→                      className="px-3 py-1 rounded-lg glass-subtle text-[10px] text-[#C48A3A] hover:bg-[#C48A3A]/20 transition-colors"
+  1246→                    >
+  1247→                      Exact
+  1248→                    </button>
+  1249→                  </div>
+  1250→                  {cashTenderedNum >= checkoutTotal && (
+  1251→                    <div className="flex justify-between text-sm pt-1 border-t border-white/[0.06]">
+  1252→                      <span className="text-white/50">Change</span>
+  1253→                      <span className="text-emerald-400 font-bold">{formatCurrency(changeAmount)}</span>
+  1254→                    </div>
+  1255→                  )}
+  1256→                </div>
+  1257→              </motion.div>
+  1258→            )}
+  1259→
+  1260→            {/* Discount */}
+  1261→            <div>
+  1262→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Discount</h3>
+  1263→              <div className="space-y-2">
+  1264→                <div className="flex gap-2">
+  1265→                  <select
+  1266→                    value={discountType}
+  1267→                    onChange={(e) => { setDiscountType(e.target.value as DiscountType | ''); if (e.target.value === '') setAppliedDiscount(null); }}
+  1268→                    className="flex-1 glass-subtle rounded-xl px-3 py-2.5 text-xs text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50 appearance-none cursor-pointer"
+  1269→                  >
+  1270→                    <option value="" className="bg-[#1E1E1E]">No Discount</option>
+  1271→                    {DISCOUNT_TYPES.map((dt) => (
+  1272→                      <option key={dt.value} value={dt.value} className="bg-[#1E1E1E]">{dt.label}</option>
+  1273→                    ))}
+  1274→                  </select>
+  1275→                  {discountType && discountType !== 'SENIOR_CITIZEN' && discountType !== 'PWD' && discountType !== 'EMPLOYEE' && discountType !== 'PROMO' && (
+  1276→                    <input
+  1277→                      type="number"
+  1278→                      value={discountValue}
+  1279→                      onChange={(e) => setDiscountValue(e.target.value)}
+  1280→                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Amount'}
+  1281→                      className="w-24 glass-subtle rounded-xl px-3 py-2.5 text-xs text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1282→                    />
+  1283→                  )}
+  1284→                </div>
+  1285→                {discountType === 'PROMO' && (
+  1286→                  <div className="relative">
+  1287→                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+  1288→                    <input
+  1289→                      type="text"
+  1290→                      value={promoCode}
+  1291→                      onChange={(e) => setPromoCode(e.target.value)}
+  1292→                      placeholder="Enter promo code..."
+  1293→                      className="w-full glass-subtle rounded-xl pl-9 pr-3 py-2.5 text-xs text-white bg-transparent placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1294→                    />
+  1295→                  </div>
+  1296→                )}
+  1297→                {appliedDiscount && appliedDiscount.amount > 0 && (
+  1298→                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+  1299→                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+  1300→                      <BadgePercent className="w-3.5 h-3.5" />
+  1301→                      Discount applied
+  1302→                    </span>
+  1303→                    <span className="text-xs text-emerald-400 font-bold">-{formatCurrency(appliedDiscount.amount)}</span>
+  1304→                  </div>
+  1305→                )}
+  1306→              </div>
+  1307→            </div>
+  1308→
+  1309→            {/* Customer */}
+  1310→            <div>
+  1311→              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Customer (Optional)</h3>
+  1312→              <div className="relative">
+  1313→                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+  1314→                <input
+  1315→                  type="text"
+  1316→                  value={customerSearch}
+  1317→                  onChange={(e) => handleSearchCustomer(e.target.value)}
+  1318→                  onFocus={() => customerResults.length > 0 && setShowCustomerDropdown(true)}
+  1319→                  placeholder="Search customer name..."
+  1320→                  className="w-full glass-subtle rounded-xl pl-9 pr-3 py-2.5 text-xs text-white bg-transparent placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#C48A3A]/50"
+  1321→                />
+  1322→                {selectedCustomer && (
+  1323→                  <button
+  1324→                    onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
+  1325→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+  1326→                  >
+  1327→                    <X className="w-3.5 h-3.5" />
+  1328→                  </button>
+  1329→                )}
+  1330→                <AnimatePresence>
+  1331→                  {showCustomerDropdown && customerResults.length > 0 && (
+  1332→                    <motion.div
+  1333→                      className="absolute top-full left-0 right-0 mt-1 glass-strong rounded-xl overflow-hidden z-20"
+  1334→                      initial={{ opacity: 0, y: -4 }}
+  1335→                      animate={{ opacity: 1, y: 0 }}
+  1336→                      exit={{ opacity: 0, y: -4 }}
+  1337→                    >
+  1338→                      {customerResults.map((customer) => (
+  1339→                        <button
+  1340→                          key={customer.id}
+  1341→                          onClick={() => handleSelectCustomer(customer)}
+  1342→                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/[0.06] transition-colors text-left"
+  1343→                        >
+  1344→                          <div className="flex items-center gap-2">
+  1345→                            <div className="w-6 h-6 rounded-full bg-[#C48A3A]/15 flex items-center justify-center">
+  1346→                              <User className="w-3 h-3 text-[#C48A3A]" />
+  1347→                            </div>
+  1348→                            <span className="text-xs text-white/80">{customer.name}</span>
+  1349→                          </div>
+  1350→                          <span className="text-[10px] text-white/30">{customer.loyaltyPoints} pts</span>
+  1351→                        </button>
+  1352→                      ))}
+  1353→                    </motion.div>
+  1354→                  )}
+  1355→                </AnimatePresence>
+  1356→              </div>
+  1357→            </div>
+  1358→
+  1359→            {/* Error */}
+  1360→            {orderError && (
+  1361→              <motion.div
+  1362→                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20"
+  1363→                initial={{ opacity: 0, y: -4 }}
+  1364→                animate={{ opacity: 1, y: 0 }}
+  1365→              >
+  1366→                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+  1367→                <span className="text-xs text-red-400">{orderError}</span>
+  1368→              </motion.div>
+  1369→            )}
+  1370→          </div>
+  1371→
+  1372→          {/* Complete Sale Button */}
+  1373→          <div className="p-4 border-t border-white/[0.06]">
+  1374→            <motion.button
+  1375→              onClick={handleCompleteSale}
+  1376→              disabled={isCompleting || cart.length === 0}
+  1377→              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm hover:shadow-xl hover:shadow-[#C48A3A]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+  1378→              whileHover={!isCompleting ? { scale: 1.01 } : {}}
+  1379→              whileTap={!isCompleting ? { scale: 0.99 } : {}}
+  1380→            >
+  1381→              {isCompleting ? (
+  1382→                <>
+  1383→                  <div className="w-4 h-4 border-2 border-[#111111]/30 border-t-[#111111] rounded-full animate-spin" />
+  1384→                  Processing...
+  1385→                </>
+  1386→              ) : (
+  1387→                <>
+  1388→                  <Check className="w-4 h-4" />
+  1389→                  Complete Sale · {formatCurrency(checkoutTotal)}
+  1390→                </>
+  1391→              )}
+  1392→            </motion.button>
+  1393→          </div>
+  1394→        </motion.div>
+  1395→      </motion.div>
+  1396→    );
+  1397→  }
+  1398→
+  1399→  // ============ RECEIPT VIEW ============
+  1400→  function renderReceiptView() {
+  1401→    if (!isReceiptOpen || !currentReceiptOrder) return null;
+  1402→
+  1403→    const order = currentReceiptOrder;
+  1404→    const payLabel = PAYMENT_METHODS.find(pm => pm.value === order.paymentMethod)?.label ?? order.paymentMethod;
+  1405→
+  1406→    return (
+  1407→      <motion.div
+  1408→        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+  1409→        initial={{ opacity: 0 }}
+  1410→        animate={{ opacity: 1 }}
+  1411→        exit={{ opacity: 0 }}
+  1412→      >
+  1413→        <motion.div
+  1414→          className="absolute inset-0 bg-black/80 backdrop-blur-lg"
+  1415→          onClick={handleNewOrder}
+  1416→          initial={{ opacity: 0 }}
+  1417→          animate={{ opacity: 1 }}
+  1418→          exit={{ opacity: 0 }}
+  1419→        />
+  1420→
+  1421→        <motion.div
+  1422→          className="relative z-10 w-full max-w-sm"
+  1423→          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+  1424→          animate={{ scale: 1, opacity: 1, y: 0 }}
+  1425→          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+  1426→          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+  1427→        >
+  1428→          {/* Receipt Paper */}
+  1429→          <div className="bg-white rounded-t-2xl shadow-2xl overflow-hidden">
+  1430→            {/* Torn edge effect */}
+  1431→            <div className="h-3 bg-white relative">
+  1432→              <svg className="absolute bottom-0 left-0 right-0 -translate-y-full" viewBox="0 0 400 12" preserveAspectRatio="none">
+  1433→                <path d="M0,12 Q10,0 20,12 Q30,0 40,12 Q50,0 60,12 Q70,0 80,12 Q90,0 100,12 Q110,0 120,12 Q130,0 140,12 Q150,0 160,12 Q170,0 180,12 Q190,0 200,12 Q210,0 220,12 Q230,0 240,12 Q250,0 260,12 Q270,0 280,12 Q290,0 300,12 Q310,0 320,12 Q330,0 340,12 Q350,0 360,12 Q370,0 380,12 Q390,0 400,12" fill="white" />
+  1434→              </svg>
+  1435→            </div>
+  1436→
+  1437→            <div className="px-6 py-4 receipt-font text-black">
+  1438→              {/* Store Header */}
+  1439→              <div className="text-center mb-3">
+  1440→                <h2 className="text-base font-bold tracking-wide">☕ THE BRONZE CUP</h2>
+  1441→                <p className="text-[10px] text-gray-500 mt-0.5">123 Cafe Street, Manila</p>
+  1442→                <p className="text-[10px] text-gray-500">Tel: (02) 8888-1234</p>
+  1443→              </div>
+  1444→
+  1445→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1446→
+  1447→              {/* Order Info */}
+  1448→              <div className="flex justify-between text-[11px] mb-1">
+  1449→                <span className="text-gray-500">Order #{order.orderNumber}</span>
+  1450→                <span className="text-gray-500">{ORDER_TYPES.find(o => o.value === order.orderType)?.label}</span>
+  1451→              </div>
+  1452→              <div className="flex justify-between text-[11px] mb-1">
+  1453→                <span className="text-gray-500">Cashier: Staff</span>
+  1454→                <span className="text-gray-500">{new Date(order.createdAt).toLocaleString()}</span>
+  1455→              </div>
+  1456→
+  1457→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1458→
+  1459→              {/* Items */}
+  1460→              <div className="space-y-1.5">
+  1461→                {(order.items ?? []).map((item, idx) => (
+  1462→                  <div key={idx} className="text-[11px]">
+  1463→                    <div className="flex justify-between">
+  1464→                      <span className="font-medium">{item.quantity}x {item.productName}</span>
+  1465→                      <span className="font-medium">{formatCurrency(item.subtotal)}</span>
+  1466→                    </div>
+  1467→                    {item.size && <div className="text-gray-400 text-[10px] ml-4">Size: {item.size}</div>}
+  1468→                    {item.sugarLevel && <div className="text-gray-400 text-[10px] ml-4">Sugar: {item.sugarLevel}</div>}
+  1469→                    {item.iceLevel && <div className="text-gray-400 text-[10px] ml-4">Ice: {item.iceLevel}</div>}
+  1470→                    {item.temperature && <div className="text-gray-400 text-[10px] ml-4">{item.temperature}</div>}
+  1471→                    {item.notes && <div className="text-gray-400 text-[10px] ml-4 italic">{item.notes}</div>}
+  1472→                  </div>
+  1473→                ))}
+  1474→              </div>
+  1475→
+  1476→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1477→
+  1478→              {/* Totals */}
+  1479→              <div className="space-y-0.5 text-[11px]">
+  1480→                <div className="flex justify-between text-gray-600">
+  1481→                  <span>Subtotal</span>
+  1482→                  <span>{formatCurrency(order.subtotal)}</span>
+  1483→                </div>
+  1484→                {order.discountAmount > 0 && (
+  1485→                  <div className="flex justify-between text-gray-600">
+  1486→                    <span>Discount{order.discountType ? ` (${order.discountType})` : ''}</span>
+  1487→                    <span>-{formatCurrency(order.discountAmount)}</span>
+  1488→                  </div>
+  1489→                )}
+  1490→                <div className="flex justify-between text-gray-600">
+  1491→                  <span>Tax (12%)</span>
+  1492→                  <span>{formatCurrency(order.taxAmount)}</span>
+  1493→                </div>
+  1494→                <div className="border-t border-dashed border-gray-300 my-1" />
+  1495→                <div className="flex justify-between text-sm font-bold">
+  1496→                  <span>TOTAL</span>
+  1497→                  <span>{formatCurrency(order.totalAmount)}</span>
+  1498→                </div>
+  1499→              </div>
+  1500→
+  1501→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1502→
+  1503→              {/* Payment Info */}
+  1504→              <div className="space-y-0.5 text-[11px]">
+  1505→                <div className="flex justify-between text-gray-600">
+  1506→                  <span>Payment</span>
+  1507→                  <span>{payLabel}</span>
+  1508→                </div>
+  1509→                <div className="flex justify-between text-gray-600">
+  1510→                  <span>Amount Paid</span>
+  1511→                  <span>{formatCurrency(order.amountPaid)}</span>
+  1512→                </div>
+  1513→                {order.changeAmount > 0 && (
+  1514→                  <div className="flex justify-between font-bold text-[11px]">
+  1515→                    <span>Change</span>
+  1516→                    <span>{formatCurrency(order.changeAmount)}</span>
+  1517→                  </div>
+  1518→                )}
+  1519→              </div>
+  1520→
+  1521→              <div className="border-t border-dashed border-gray-300 my-2" />
+  1522→
+  1523→              <div className="text-center text-[10px] text-gray-400 pt-1">
+  1524→                <p>Thank you for your purchase!</p>
+  1525→                <p className="mt-0.5">Please come again ☕</p>
+  1526→              </div>
+  1527→            </div>
+  1528→
+  1529→            {/* Bottom torn edge */}
+  1530→            <div className="h-3 bg-white relative">
+  1531→              <svg className="absolute top-0 left-0 right-0 translate-y-full" viewBox="0 0 400 12" preserveAspectRatio="none">
+  1532→                <path d="M0,0 Q10,12 20,0 Q30,12 40,0 Q50,12 60,0 Q70,12 80,0 Q90,12 100,0 Q110,12 120,0 Q130,12 140,0 Q150,12 160,0 Q170,12 180,0 Q190,12 200,0 Q210,12 220,0 Q230,12 240,0 Q250,12 260,0 Q270,12 280,0 Q290,12 300,0 Q310,12 320,0 Q330,12 340,0 Q350,12 360,0 Q370,12 380,0 Q390,12 400,0" fill="white" />
+  1533→              </svg>
+  1534→            </div>
+  1535→          </div>
+  1536→
+  1537→          {/* Actions */}
+  1538→          <div className="flex gap-3 mt-4">
+  1539→            <motion.button
+  1540→              onClick={handlePrintReceipt}
+  1541→              className="flex-1 py-3 rounded-xl glass text-white/80 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white/[0.08] transition-colors"
+  1542→              whileHover={{ scale: 1.02 }}
+  1543→              whileTap={{ scale: 0.98 }}
+  1544→            >
+  1545→              <Printer className="w-4 h-4" />
+  1546→              Print Receipt
+  1547→            </motion.button>
+  1548→            <motion.button
+  1549→              onClick={handleNewOrder}
+  1550→              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#D4A050] text-[#111111] font-bold text-sm flex items-center justify-center gap-2"
+  1551→              whileHover={{ scale: 1.02 }}
+  1552→              whileTap={{ scale: 0.98 }}
+  1553→            >
+  1554→              <ShoppingBag className="w-4 h-4" />
+  1555→              New Order
+  1556→            </motion.button>
+  1557→          </div>
+  1558→        </motion.div>
+  1559→      </motion.div>
+  1560→    );
+  1561→  }
+  1562→
+  1563→  // ============ MAIN RENDER ============
+  1564→  return (
+  1565→    <div className="h-full flex flex-col md:flex-row gap-0 md:gap-4 overflow-hidden bg-[#111111]">
+  1566→      {/* Left Side: Categories + Product Grid */}
+  1567→      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+  1568→        {/* Categories Bar */}
+  1569→        <div className="flex-shrink-0 p-2 md:p-3">
+  1570→          {renderCategoriesBar()}
+  1571→        </div>
+  1572→
+  1573→        {/* Mobile Search */}
+  1574→        {renderMobileSearch()}
+  1575→
+  1576→        {/* Product Grid */}
+  1577→        {renderProductGrid()}
+  1578→      </div>
+  1579→
+  1580→      {/* Right Side: Cart Panel (Desktop) */}
+  1581→      {!isMobile && (
+  1582→        <div className="w-[380px] flex-shrink-0 hidden md:flex">
+  1583→          <div className="w-full glass-strong rounded-2xl p-4 flex flex-col overflow-hidden">
+  1584→            {renderCartPanel()}
+  1585→          </div>
+  1586→        </div>
+  1587→      )}
+  1588→
+  1589→      {/* Mobile Cart FAB */}
+  1590→      <AnimatePresence>{renderMobileCartButton()}</AnimatePresence>
+  1591→
+  1592→      {/* Mobile Cart Sheet */}
+  1593→      {renderMobileCartSheet()}
+  1594→
+  1595→      {/* Quick Add Dialog */}
+  1596→      <AnimatePresence>{quickAddProduct && renderQuickAddDialog()}</AnimatePresence>
+  1597→
+  1598→      {/* Checkout Dialog */}
+  1599→      <AnimatePresence>{isCheckoutOpen && renderCheckoutDialog()}</AnimatePresence>
+  1600→
+  1601→      {/* Receipt View */}
+  1602→      <AnimatePresence>{isReceiptOpen && renderReceiptView()}</AnimatePresence>
+  1603→    </div>
+  1604→  );
+  1605→}
