@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Search, Edit2, Package, X, Check, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Search, Edit2, Package, X, Check, AlertTriangle, Tag, Trash2 } from 'lucide-react';
 import type { Product, Category } from '@/lib/types';
 import { formatCurrency } from '@/lib/constants';
 
@@ -15,10 +15,14 @@ export default function ProductsView() {
   const [catFilter, setCatFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [showCatManager, setShowCatManager] = useState(false);
+
+  const fetchProducts = () => fetch('/api/products').then(r => r.json()).then(setProducts);
+  const fetchCategories = () => fetch('/api/categories').then(r => r.json()).then(setCategories);
 
   useEffect(() => {
-    Promise.all([fetch('/api/products').then(r => r.json()), fetch('/api/categories').then(r => r.json())])
-      .then(([p, c]) => { setProducts(p); setCategories(c); setLoading(false); });
+    Promise.all([fetchProducts(), fetchCategories()])
+      .then(() => setLoading(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -45,10 +49,16 @@ export default function ProductsView() {
           <h3 className="text-xl font-bold text-white">Products</h3>
           <p className="text-sm text-[#888]">{filtered.length} of {products.length} products</p>
         </div>
-        <button onClick={() => { setEditProduct(null); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all">
-          <Plus size={16} /> Add Product
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowCatManager(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#888] text-sm font-medium hover:text-white hover:bg-white/[0.06] transition-all">
+            <Tag size={16} /> Categories
+          </button>
+          <button onClick={() => { setEditProduct(null); setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all">
+            <Plus size={16} /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -143,12 +153,22 @@ export default function ProductsView() {
 
       {/* Product Form Dialog */}
       {showForm && <ProductForm product={editProduct} categories={categories} onClose={() => setShowForm(false)} onSave={() => {
-        fetch('/api/products').then(r => r.json()).then(setProducts);
+        fetchProducts();
         setShowForm(false);
       }} />}
+
+      {/* Category Manager Dialog */}
+      <AnimatePresence>
+        {showCatManager && <CategoryManager categories={categories} onClose={() => setShowCatManager(false)} onRefresh={() => {
+        fetchCategories();
+        fetchProducts();
+      }} />}
+      </AnimatePresence>
     </div>
   );
 }
+
+// ============ PRODUCT FORM ============
 
 function ProductForm({ product, categories, onClose, onSave }: { product: Product | null; categories: Category[]; onClose: () => void; onSave: () => void }) {
   const [name, setName] = useState(product?.name || '');
@@ -164,14 +184,12 @@ function ProductForm({ product, categories, onClose, onSave }: { product: Produc
     try {
       const catIds = selectedCategoryId ? JSON.stringify([selectedCategoryId]) : '[]';
       if (product) {
-        // Update existing product
         const res = await fetch('/api/products', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: product.id, name, sku, description: desc, costPrice: Number(cost), sellingPrice: Number(price), categoryIds: catIds }),
         });
         if (!res.ok) { const err = await res.json(); alert(err.error || 'Failed to update product'); return; }
       } else {
-        // Create new product
         const res = await fetch('/api/products', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, sku, description: desc, costPrice: Number(cost), sellingPrice: Number(price), categoryIds: catIds }),
@@ -191,15 +209,15 @@ function ProductForm({ product, categories, onClose, onSave }: { product: Produc
           <button onClick={onClose} className="p-1.5 rounded-lg text-[#888] hover:text-white hover:bg-white/[0.04]"><X size={18} /></button>
         </div>
         <div className="space-y-4">
-          <div><label className="text-xs font-medium text-[#888] mb-1 block">Product Name</label>
+          <div><label className="text-xs font-medium text-[#888] mb-1 block">Product Name *</label>
             <input value={name} onChange={e => setName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50" /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs font-medium text-[#888] mb-1 block">SKU</label>
+            <div><label className="text-xs font-medium text-[#888] mb-1 block">SKU *</label>
               <input value={sku} onChange={e => setSku(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50" /></div>
             <div><label className="text-xs font-medium text-[#888] mb-1 block">Category</label>
-              <select className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50">
-                <option className="bg-[#1E1E1E]">Select...</option>
-                {categories.map(c => <option key={c.id} value={c.id} className="bg-[#1E1E1E]">{c.name}</option>)}
+              <select value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50">
+                <option value="" className="bg-[#1E1E1E]">None</option>
+                {categories.filter(c => c.isActive).map(c => <option key={c.id} value={c.id} className="bg-[#1E1E1E]">{c.name}</option>)}
               </select></div>
           </div>
           <div><label className="text-xs font-medium text-[#888] mb-1 block">Description</label>
@@ -217,6 +235,106 @@ function ProductForm({ product, categories, onClose, onSave }: { product: Produc
           <button onClick={handleSave} disabled={saving || !name || !sku}
             className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium disabled:opacity-50 hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all">
             {saving ? 'Saving...' : 'Save Product'}</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ============ CATEGORY MANAGER ============
+
+function CategoryManager({ categories, onClose, onRefresh }: { categories: Category[]; onClose: () => void; onRefresh: () => void }) {
+  const [catName, setCatName] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async () => {
+    if (!catName.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: catName.trim() }),
+      });
+      if (!res.ok) { const err = await res.json(); alert(err.error || 'Failed to add category'); return; }
+      setCatName('');
+      onRefresh();
+    } catch { alert('Network error'); }
+    setSaving(false);
+  };
+
+  const handleRename = async (id: string) => {
+    if (!editName.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name: editName.trim() }),
+      });
+      if (!res.ok) { const err = await res.json(); alert(err.error || 'Failed to update'); return; }
+      setEditId(null);
+      setEditName('');
+      onRefresh();
+    } catch { alert('Network error'); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this category? Products in it will become uncategorized.')) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/categories?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Failed to delete'); return; }
+      onRefresh();
+    } catch { alert('Network error'); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-md bg-[#1A1A1A] border border-white/[0.08] rounded-2xl p-6 shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold text-white">Manage Categories</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-[#888] hover:text-white hover:bg-white/[0.04]"><X size={18} /></button>
+        </div>
+
+        {/* Add new category */}
+        <div className="flex gap-2 mb-5">
+          <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="New category name..."
+            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            className="flex-1 px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white placeholder:text-[#555] focus:outline-none focus:border-[#C48A3A]/50" />
+          <button onClick={handleAdd} disabled={saving || !catName.trim()}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium disabled:opacity-40 hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all">
+            <Plus size={16} />
+          </button>
+        </div>
+
+        {/* Category list */}
+        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+          {categories.length === 0 && <p className="text-xs text-[#555] text-center py-6">No categories yet. Add one above.</p>}
+          {categories.map(cat => (
+            <div key={cat.id} className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              {editId === cat.id ? (
+                <input value={editName} onChange={e => setEditName(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleRename(cat.id); if (e.key === 'Escape') { setEditId(null); setEditName(''); } }}
+                  className="flex-1 px-2 py-1 rounded-lg bg-white/[0.05] border border-[#C48A3A]/50 text-sm text-white focus:outline-none" />
+              ) : (
+                <span className="flex-1 text-sm text-white">{cat.name}</span>
+              )}
+              {editId === cat.id ? (
+                <button onClick={() => handleRename(cat.id)} className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10"><Check size={14} /></button>
+              ) : (
+                <button onClick={() => { setEditId(cat.id); setEditName(cat.name); }} className="p-1.5 rounded-lg text-[#888] hover:text-white hover:bg-white/[0.06]" title="Rename"><Edit2 size={14} /></button>
+              )}
+              <button onClick={() => handleDelete(cat.id)} className="p-1.5 rounded-lg text-[#888] hover:text-red-400 hover:bg-red-500/10" title="Delete"><Trash2 size={14} /></button>
+            </div>
+          ))}
         </div>
       </motion.div>
     </div>
