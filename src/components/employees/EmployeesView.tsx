@@ -39,6 +39,7 @@ interface AttHistoryRecord {
   hoursWorked: number | null;
   status: string;
 }
+
 export default function EmployeesView() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceRecord>>({});
@@ -135,7 +136,8 @@ export default function EmployeesView() {
     setEditId(emp.id);
     setShowForm(true);
   };
-    const handleSave = async () => {
+
+  const handleSave = async () => {
     if (!form.name.trim()) return;
     if (!editId && !form.pin.trim()) return;
     setSaving(true);
@@ -370,9 +372,9 @@ export default function EmployeesView() {
                             <td className="py-2.5 pr-3 text-[#888]">{r.employeeRole}</td>
                             <td className="py-2.5 pr-3 text-[#888]">{clockInTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                             <td className="py-2.5 pr-3 text-[#888]">{clockInTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</td>
-                            <td className="py-2.5 pr-3 text-[#888]">{clockOutTime ? clockOutTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '\u2014'}</td>
-                            <td className="py-2.5 pr-3 text-white">{r.hoursWorked != null ? r.hoursWorked.toFixed(1) + 'h' : '\u2014'}</td>
-                            <td className="py-2.5 pr-3 text-right text-[#C48A3A] font-medium">{r.dailyRate > 0 ? formatCurrency(r.dailyRate) : '\u2014'}</td>
+                            <td className="py-2.5 pr-3 text-[#888]">{clockOutTime ? clockOutTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}</td>
+                            <td className="py-2.5 pr-3 text-white">{r.hoursWorked != null ? r.hoursWorked.toFixed(1) + 'h' : '—'}</td>
+                            <td className="py-2.5 pr-3 text-right text-[#C48A3A] font-medium">{r.dailyRate > 0 ? formatCurrency(r.dailyRate) : '—'}</td>
                             <td className="py-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.status === 'ACTIVE' ? 'bg-green-500/10 text-green-400' : 'bg-white/[0.06] text-[#888]'}`}>
                                 {r.status === 'ACTIVE' ? 'On Shift' : 'Completed'}
@@ -392,7 +394,7 @@ export default function EmployeesView() {
 
       {/* Today's Sales Performance Bars */}
       <div className="premium-card p-5">
-        <h4 className="text-sm font-bold text-white mb-4">Today's Sales Performance</h4>
+        <h4 className="text-sm font-bold text-white mb-4">Today&apos;s Sales Performance</h4>
         <div className="space-y-3">
           {employees.filter(e => e.role === 'CASHIER' || e.role === 'MANAGER').map((emp, i) => {
             const realSales = salesMap[emp.id] || 0;
