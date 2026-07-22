@@ -94,6 +94,7 @@ export default function POSView() {
   // Cart
   const [showHeldOrders, setShowHeldOrders] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [enabledPaymentKeys, setEnabledPaymentKeys] = useState<string[]>(PAYMENT_METHODS.map(p => p.value));
 
   // Stores
   const {
@@ -130,6 +131,14 @@ export default function POSView() {
       }
     }
     fetchData();
+  }, []);
+
+  // Load enabled payment methods from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ogalley_enabled_payments');
+      if (saved) setEnabledPaymentKeys(JSON.parse(saved));
+    } catch { /* ignore */ }
   }, []);
 
   // ============ DERIVED STATE ============
@@ -1332,7 +1341,7 @@ export default function POSView() {
             <div>
               <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Payment Method</h3>
               <div className="grid grid-cols-4 gap-2">
-                {PAYMENT_METHODS.map((pm) => (
+                {PAYMENT_METHODS.filter((pm) => enabledPaymentKeys.includes(pm.value)).map((pm) => (
                   <button
                     key={pm.value}
                     onClick={() => setCheckoutPayment(pm.value as PaymentMethod)}
