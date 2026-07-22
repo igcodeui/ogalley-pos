@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, useUIStore, useAuthStore } from '@/lib/store';
 import type { Product, Category, CartItem, PaymentMethod, OrderType, Order } from '@/lib/types';
 import { formatCurrency, SUGAR_LEVELS, ICE_LEVELS, TEMPERATURES, SIZES, SIZE_PRICE_ADJ, ORDER_TYPES, PAYMENT_METHODS, DISCOUNT_TYPES, generateOrderNumber } from '@/lib/constants';
+import { submitOrder, cacheProducts, getCachedProducts, isOnline } from '@/lib/offline';
 import { Search, Plus, Minus, Trash2, ShoppingBag, UtensilsCrossed, Package, Truck, CreditCard, Banknote, Smartphone, Wallet, Gift, BadgePercent, X, Pause, Play, Heart, Clock, ChevronDown, Tag, Percent, User, Check, Printer, AlertCircle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -122,6 +123,10 @@ export default function POSView() {
         if (prodRes.ok) {
           const prods = await prodRes.json();
           setProducts(prods.filter((p: Product) => p.isAvailable));
+          cacheProducts(prods.filter((p: Product) => p.isAvailable));
+        } else {
+          const cached = getCachedProducts();
+          if (cached) setProducts(cached.filter((p: Product) => p.isAvailable));
         }
       } catch (e) {
         console.error('Failed to fetch POS data:', e);
@@ -336,15 +341,10 @@ export default function POSView() {
         }],
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) throw new Error('Failed to create order');
-
-      const createdOrder = await res.json();
+      const { order: createdOrder, offline: wasOffline } = await submitOrder(body);
+      if (wasOffline) {
+        // Still show receipt for offline orders
+      }
 
       setCurrentReceiptOrder({
         ...createdOrder,
