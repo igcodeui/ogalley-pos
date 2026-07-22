@@ -297,7 +297,7 @@ export default function POSView() {
       // Determine tax exemption (Senior/PWD in PH are VAT-exempt)
       const isTaxExempt = appliedDiscount?.type === 'SENIOR_CITIZEN' || appliedDiscount?.type === 'PWD';
       const finalTax = isTaxExempt ? 0 : checkoutTax;
-      const finalTotal = checkoutSubtotal - checkoutDiscount + finalTax;
+      const finalTotal = checkoutSubtotal - checkoutDiscount;
 
       const body = {
         orderNumber,
