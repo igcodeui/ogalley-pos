@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserCog, Users, Clock, X, Shield, Star, Crown, UserCircle, Plus, Trash2, Edit3, Save } from 'lucide-react';
+import { UserCog, Users, Clock, X, Shield, Star, Crown, UserCircle, Plus, Trash2, Edit3, Save, Download, Calendar, FileSpreadsheet } from 'lucide-react';
 import type { Employee } from '@/lib/types';
 import { formatCurrency } from '@/lib/constants';
 
@@ -15,7 +15,6 @@ const ROLE_STYLES: Record<string, { bg: string; text: string; icon: any }> = {
 
 const ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'INVENTORY'] as const;
 
-// Track who is clocked in today
 interface AttendanceRecord {
   employeeId: string;
   status: string;
@@ -23,9 +22,27 @@ interface AttendanceRecord {
   hoursWorked: number | null;
 }
 
+interface SalesEntry {
+  employeeId: string;
+  totalSales: number;
+}
+
+interface AttHistoryRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeRole: string;
+  dailyRate: number;
+  commissionRate: number;
+  clockIn: string;
+  clockOut: string | null;
+  hoursWorked: number | null;
+  status: string;
+}
 export default function EmployeesView() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceRecord>>({});
+  const [salesMap, setSalesMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -33,17 +50,28 @@ export default function EmployeesView() {
   const [saving, setSaving] = useState(false);
   const [clockLoading, setClockLoading] = useState<string | null>(null);
 
+  // Attendance history state
+  const [showAttendance, setShowAttendance] = useState(false);
+  const [attRecords, setAttRecords] = useState<AttHistoryRecord[]>([]);
+  const [attLoading, setAttLoading] = useState(false);
+  const [attFrom, setAttFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [attTo, setAttTo] = useState(() => new Date().toISOString().slice(0, 10));
+
   // Form state
   const [form, setForm] = useState({ name: '', email: '', phone: '', role: 'CASHIER', pin: '', hireDate: '', hourlyRate: '0', commissionRate: '0' });
 
   const fetchData = useCallback(async () => {
     try {
-      const [empRes, attRes] = await Promise.all([
+      const [empRes, attRes, dashRes] = await Promise.all([
         fetch('/api/employees').then(r => r.json()),
         fetch('/api/attendance').then(r => r.json()).catch(() => []),
+        fetch('/api/dashboard').then(r => r.json()).catch(() => ({ employeeRanking: [] })),
       ]);
       setEmployees(empRes || []);
-      // Build map of clocked-in employees
       const map: Record<string, AttendanceRecord> = {};
       for (const a of (attRes || [])) {
         if (a.status === 'ACTIVE') {
@@ -51,11 +79,41 @@ export default function EmployeesView() {
         }
       }
       setAttendance(map);
+      const sm: Record<string, number> = {};
+      for (const e of (dashRes?.employeeRanking || []) as SalesEntry[]) {
+        sm[e.employeeId] = e.totalSales;
+      }
+      setSalesMap(sm);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchAttHistory = async () => {
+    setAttLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('from', attFrom);
+      params.set('to', attTo);
+      const res = await fetch(`/api/attendance?${params.toString()}`);
+      const data = await res.json();
+      setAttRecords(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); }
+    finally { setAttLoading(false); }
+  };
+
+  useEffect(() => {
+    if (showAttendance) fetchAttHistory();
+  }, [showAttendance, attFrom, attTo]);
+
+  const handleExportCSV = () => {
+    const params = new URLSearchParams();
+    params.set('from', attFrom);
+    params.set('to', attTo);
+    params.set('export', 'csv');
+    window.open(`/api/attendance?${params.toString()}`, '_blank');
+  };
 
   const resetForm = () => {
     setForm({ name: '', email: '', phone: '', role: 'CASHIER', pin: '', hireDate: '', hourlyRate: '0', commissionRate: '0' });
@@ -69,7 +127,7 @@ export default function EmployeesView() {
       email: emp.email || '',
       phone: emp.phone || '',
       role: emp.role,
-      pin: '', // PIN not returned from server for security — leave blank to keep current
+      pin: '',
       hireDate: emp.hireDate ? emp.hireDate.slice(0, 10) : '',
       hourlyRate: String(emp.hourlyRate),
       commissionRate: String(emp.commissionRate),
@@ -77,10 +135,9 @@ export default function EmployeesView() {
     setEditId(emp.id);
     setShowForm(true);
   };
-
-  const handleSave = async () => {
+    const handleSave = async () => {
     if (!form.name.trim()) return;
-    if (!editId && !form.pin.trim()) return; // PIN required for new employees
+    if (!editId && !form.pin.trim()) return;
     setSaving(true);
     try {
       const isEdit = editId !== null;
@@ -93,7 +150,6 @@ export default function EmployeesView() {
         hourlyRate: parseFloat(form.hourlyRate) || 0,
         commissionRate: parseFloat(form.commissionRate) || 0,
       };
-      // Only send PIN if user entered a new one
       if (form.pin.trim()) payload.pin = form.pin.trim();
       if (isEdit) payload.id = editId;
       const res = await fetch('/api/employees', {
@@ -155,10 +211,16 @@ export default function EmployeesView() {
           <h3 className="text-xl font-bold text-white">Employees</h3>
           <p className="text-xs text-[#888] mt-0.5">Manage staff, roles, and attendance</p>
         </div>
-        <button onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all active:scale-[0.98]">
-          <Plus size={16} /> Add Employee
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowAttendance(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-[0.98] ${showAttendance ? 'bg-white/[0.1] text-white border border-white/[0.1]' : 'bg-white/[0.05] text-[#888] hover:text-white border border-white/[0.06]'}`}>
+            <Calendar size={16} /> Attendance History
+          </button>
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C48A3A] to-[#A06E28] text-white text-sm font-medium hover:shadow-lg hover:shadow-[#C48A3A]/20 transition-all active:scale-[0.98]">
+            <Plus size={16} /> Add Employee
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -203,13 +265,13 @@ export default function EmployeesView() {
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-[#888]">
-                  <span>Phone</span><span className="text-white">{emp.phone || '—'}</span>
+                  <span>Phone</span><span className="text-white">{emp.phone || '\u2014'}</span>
                 </div>
                 <div className="flex justify-between text-[#888]">
-                  <span>Hire Date</span><span className="text-white">{emp.hireDate ? new Date(emp.hireDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                  <span>Hire Date</span><span className="text-white">{emp.hireDate ? new Date(emp.hireDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '\u2014'}</span>
                 </div>
                 <div className="flex justify-between text-[#888]">
-                  <span>Hourly Rate</span><span className="text-white">{emp.hourlyRate > 0 ? formatCurrency(emp.hourlyRate) + '/hr' : '—'}</span>
+                  <span>Daily Rate</span><span className="text-white">{emp.hourlyRate > 0 ? formatCurrency(emp.hourlyRate) + '/day' : '\u2014'}</span>
                 </div>
                 <div className="flex justify-between text-[#888]">
                   <span>Commission</span><span className="text-[#C48A3A]">{(emp.commissionRate * 100).toFixed(1)}%</span>
@@ -222,22 +284,18 @@ export default function EmployeesView() {
                   {isClockedIn ? `On Shift since ${new Date(attRecord.clockIn).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : 'Off Shift'}
                 </span>
                 <div className="flex-1" />
-                {/* Edit button */}
                 <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-[#888] hover:text-white hover:bg-white/[0.06] transition-colors" title="Edit">
                   <Edit3 size={14} />
                 </button>
-                {/* Clock In/Out */}
                 <button
                   disabled={clockLoading === emp.id}
                   onClick={() => handleClock(emp.id, isClockedIn ? 'OUT' : 'IN')}
                   className={`text-xs px-3 py-1.5 rounded-lg transition-all font-medium disabled:opacity-50
                     ${isClockedIn
                       ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                      : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}
-                >
+                      : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}>
                   {clockLoading === emp.id ? '...' : isClockedIn ? 'Clock Out' : 'Clock In'}
                 </button>
-                {/* Delete button */}
                 <button onClick={() => setDeleteConfirm(emp.id)} className="p-1.5 rounded-lg text-[#888] hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Remove">
                   <Trash2 size={14} />
                 </button>
@@ -247,19 +305,105 @@ export default function EmployeesView() {
         })}
       </div>
 
-      {/* Simple Sales Performance Bars */}
+      {/* Attendance History Section */}
+      <AnimatePresence>
+        {showAttendance && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden">
+            <div className="premium-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <FileSpreadsheet size={16} className="text-[#C48A3A]" />
+                  Attendance History
+                </h4>
+                <button onClick={handleExportCSV}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C48A3A]/10 text-[#C48A3A] text-xs font-medium hover:bg-[#C48A3A]/20 transition-colors">
+                  <Download size={13} /> Export CSV
+                </button>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[#888]">From:</label>
+                  <input type="date" value={attFrom} onChange={e => setAttFrom(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-[#C48A3A]/50" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[#888]">To:</label>
+                  <input type="date" value={attTo} onChange={e => setAttTo(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-[#C48A3A]/50" />
+                </div>
+                <span className="text-xs text-[#555]">{attRecords.length} records</span>
+              </div>
+
+              {/* Table */}
+              {attLoading ? (
+                <div className="text-center py-8 text-xs text-[#555]">Loading...</div>
+              ) : attRecords.length === 0 ? (
+                <div className="text-center py-8 text-xs text-[#555]">No attendance records found for this date range.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[#888] border-b border-white/[0.06]">
+                        <th className="text-left py-2 pr-3 font-medium">Employee</th>
+                        <th className="text-left py-2 pr-3 font-medium">Role</th>
+                        <th className="text-left py-2 pr-3 font-medium">Date</th>
+                        <th className="text-left py-2 pr-3 font-medium">Clock In</th>
+                        <th className="text-left py-2 pr-3 font-medium">Clock Out</th>
+                        <th className="text-left py-2 pr-3 font-medium">Hours</th>
+                        <th className="text-right py-2 pr-3 font-medium">Daily Rate</th>
+                        <th className="text-center py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attRecords.map((r, i) => {
+                        const clockInTime = new Date(r.clockIn);
+                        const clockOutTime = r.clockOut ? new Date(r.clockOut) : null;
+                        return (
+                          <tr key={r.id} className={`border-b border-white/[0.03] ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`}>
+                            <td className="py-2.5 pr-3 text-white font-medium">{r.employeeName}</td>
+                            <td className="py-2.5 pr-3 text-[#888]">{r.employeeRole}</td>
+                            <td className="py-2.5 pr-3 text-[#888]">{clockInTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                            <td className="py-2.5 pr-3 text-[#888]">{clockInTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</td>
+                            <td className="py-2.5 pr-3 text-[#888]">{clockOutTime ? clockOutTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '\u2014'}</td>
+                            <td className="py-2.5 pr-3 text-white">{r.hoursWorked != null ? r.hoursWorked.toFixed(1) + 'h' : '\u2014'}</td>
+                            <td className="py-2.5 pr-3 text-right text-[#C48A3A] font-medium">{r.dailyRate > 0 ? formatCurrency(r.dailyRate) : '\u2014'}</td>
+                            <td className="py-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.status === 'ACTIVE' ? 'bg-green-500/10 text-green-400' : 'bg-white/[0.06] text-[#888]'}`}>
+                                {r.status === 'ACTIVE' ? 'On Shift' : 'Completed'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Today's Sales Performance Bars */}
       <div className="premium-card p-5">
-        <h4 className="text-sm font-bold text-white mb-4">Today&apos;s Sales Performance</h4>
+        <h4 className="text-sm font-bold text-white mb-4">Today's Sales Performance</h4>
         <div className="space-y-3">
           {employees.filter(e => e.role === 'CASHIER' || e.role === 'MANAGER').map((emp, i) => {
-const realSales = 0;
-            const maxSales = 1;
-            const pct = 0;
+            const realSales = salesMap[emp.id] || 0;
+            const allSales = employees.filter(e => e.role === 'CASHIER' || e.role === 'MANAGER').map(e => salesMap[e.id] || 0);
+            const maxSales = Math.max(...allSales, 1);
+            const pct = Math.min(100, (realSales / maxSales) * 100);
             return (
               <div key={emp.id}>
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-[#888]">{emp.name}</span>
-                  <span className="text-[#C48A3A] font-medium">{formatCurrency(0)}</span>
+                  <span className="text-[#C48A3A] font-medium">{formatCurrency(realSales)}</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ delay: i * 0.1, duration: 0.6 }}
@@ -268,10 +412,13 @@ const realSales = 0;
               </div>
             );
           })}
+          {Object.keys(salesMap).length === 0 && (
+            <p className="text-xs text-[#555] text-center py-4">No sales recorded today yet. Start processing orders on the POS to see performance here.</p>
+          )}
         </div>
       </div>
 
-      {/* ═══ Add/Edit Employee Modal ═══ */}
+      {/* Add/Edit Employee Modal */}
       <AnimatePresence>
         {showForm && (
           <motion.div
@@ -330,7 +477,7 @@ const realSales = 0;
                       className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50" />
                   </div>
                   <div>
-                    <label className="text-xs text-[#888] mb-1 block">Hourly Rate (₱)</label>
+                    <label className="text-xs text-[#888] mb-1 block">Daily Rate (₱)</label>
                     <input value={form.hourlyRate} onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))}
                       type="number" min="0" step="0.01"
                       className="w-full px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-[#C48A3A]/50" />
@@ -352,7 +499,7 @@ const realSales = 0;
         )}
       </AnimatePresence>
 
-      {/* ═══ Delete Confirmation Modal ═══ */}
+      {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {deleteConfirm && (
           <motion.div
