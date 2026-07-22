@@ -146,16 +146,12 @@ export const usePOSStore = create<POSStore>((set, get) => ({
 
   getSubtotal: () => get().cart.reduce((sum, item) => sum + item.subtotal, 0),
   getTax: () => {
-    const sub = get().getSubtotal();
-    const disc = get().getDiscountAmount();
-    return Math.round((sub - disc) * 0.12 * 100) / 100;
+    const gross = get().getSubtotal() - get().getDiscountAmount();
+    return Math.round(gross * (0.12 / 1.12) * 100) / 100;
   },
   getDiscountAmount: () => get().appliedDiscount?.amount ?? 0,
   getTotal: () => {
-    const sub = get().getSubtotal();
-    const disc = get().getDiscountAmount();
-    const tax = Math.round((sub - disc) * 0.12 * 100) / 100;
-    return Math.round((sub - disc + tax) * 100) / 100;
+    return Math.round((get().getSubtotal() - get().getDiscountAmount()) * 100) / 100;
   },
   getItemCount: () => get().cart.reduce((sum, item) => sum + item.quantity, 0),
 }));

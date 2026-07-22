@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, useUIStore, useAuthStore } from '@/lib/store';
 import type { Product, Category, CartItem, PaymentMethod, OrderType, Order } from '@/lib/types';
 import { formatCurrency, SUGAR_LEVELS, ICE_LEVELS, TEMPERATURES, SIZES, SIZE_PRICE_ADJ, ORDER_TYPES, PAYMENT_METHODS, DISCOUNT_TYPES, generateOrderNumber } from '@/lib/constants';
-import { submitOrder, cacheProducts, getCachedProducts, isOnline } from '@/lib/offline';
 import { Search, Plus, Minus, Trash2, ShoppingBag, UtensilsCrossed, Package, Truck, CreditCard, Banknote, Smartphone, Wallet, Gift, BadgePercent, X, Pause, Play, Heart, Clock, ChevronDown, Tag, Percent, User, Check, Printer, AlertCircle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -123,10 +122,6 @@ export default function POSView() {
         if (prodRes.ok) {
           const prods = await prodRes.json();
           setProducts(prods.filter((p: Product) => p.isAvailable));
-          cacheProducts(prods.filter((p: Product) => p.isAvailable));
-        } else {
-          const cached = getCachedProducts();
-          if (cached) setProducts(cached.filter((p: Product) => p.isAvailable));
         }
       } catch (e) {
         console.error('Failed to fetch POS data:', e);
@@ -341,10 +336,15 @@ export default function POSView() {
         }],
       };
 
-      const { order: createdOrder, offline: wasOffline } = await submitOrder(body);
-      if (wasOffline) {
-        // Still show receipt for offline orders
-      }
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error('Failed to create order');
+
+      const createdOrder = await res.json();
 
       setCurrentReceiptOrder({
         ...createdOrder,
@@ -458,14 +458,14 @@ export default function POSView() {
     }
 
     lines.push(dotLine);
-    lines.push(right('Subtotal', formatCurrency(order.subtotal)));
+    lines.push(right('Net Sale', formatCurrency(Math.round((order.subtotal - order.discountAmount - order.taxAmount) * 100) / 100)));
     if (order.discountAmount > 0) {
       lines.push(right('Discount', '-' + formatCurrency(order.discountAmount)));
     }
     if (order.taxAmount > 0) {
-      lines.push(right('Tax (12%)', formatCurrency(order.taxAmount)));
+      lines.push(right('VAT (12% incl.)', formatCurrency(order.taxAmount)));
     } else {
-      lines.push(right('Tax', 'VAT Exempt'));
+      lines.push(right('VAT', 'VAT Exempt'));
     }
     lines.push(dashLine);
     lines.push(right('TOTAL', formatCurrency(order.totalAmount)));
@@ -940,8 +940,8 @@ export default function POSView() {
         {/* Totals */}
         <div className="mt-3 space-y-1.5 pt-3 border-t border-white/[0.06]">
           <div className="flex justify-between text-xs text-white/50">
-            <span>Subtotal</span>
-            <span>{formatCurrency(subtotal)}</span>
+            <span>Net Sale</span>
+            <span>{formatCurrency(subtotal - tax)}</span>
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-xs text-emerald-400">
@@ -953,7 +953,7 @@ export default function POSView() {
             </div>
           )}
           <div className="flex justify-between text-xs text-white/50">
-            <span>Tax (12%)</span>
+            <span>VAT (12% incl.)</span>
             <span>{formatCurrency(tax)}</span>
           </div>
           <div className="flex justify-between text-base font-bold text-white pt-1">
@@ -1307,8 +1307,8 @@ export default function POSView() {
                 </div>
                 <div className="px-3 py-2 bg-white/[0.02] space-y-1">
                   <div className="flex justify-between text-xs text-white/50">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(checkoutSubtotal)}</span>
+                    <span>Net Sale</span>
+                    <span>{formatCurrency(checkoutSubtotal - checkoutTax)}</span>
                   </div>
                   {checkoutDiscount > 0 && (
                     <div className="flex justify-between text-xs text-emerald-400">
@@ -1317,7 +1317,7 @@ export default function POSView() {
                     </div>
                   )}
                   <div className="flex justify-between text-xs text-white/50">
-                    <span>Tax (12%)</span>
+                    <span>VAT (12% incl.)</span>
                     <span>{formatCurrency(checkoutTax)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-bold text-white pt-1 border-t border-white/[0.06]">
@@ -1615,8 +1615,8 @@ export default function POSView() {
               {/* Totals */}
               <div className="space-y-0.5 text-[11px]">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(order.subtotal)}</span>
+                  <span>Net Sale</span>
+                  <span>{formatCurrency(Math.round((order.subtotal - (order.discountAmount || 0) - order.taxAmount) * 100) / 100)}</span>
                 </div>
                 {order.discountAmount > 0 && (
                   <div className="flex justify-between text-gray-600">
@@ -1625,7 +1625,7 @@ export default function POSView() {
                   </div>
                 )}
                 <div className="flex justify-between text-gray-600">
-                  <span>Tax (12%)</span>
+                  <span>VAT (12% incl.)</span>
                   <span>{formatCurrency(order.taxAmount)}</span>
                 </div>
                 <div className="border-t border-dashed border-gray-300 my-1" />

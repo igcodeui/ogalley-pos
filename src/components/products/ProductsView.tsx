@@ -339,4 +339,8 @@ function CategoryManager({ categories, onClose, onRefresh }: { categories: Categ
       </motion.div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> ab44fda (tax)
