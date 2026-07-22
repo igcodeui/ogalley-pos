@@ -95,6 +95,13 @@ export default function POSView() {
   const [showHeldOrders, setShowHeldOrders] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [enabledPaymentKeys, setEnabledPaymentKeys] = useState<string[]>(PAYMENT_METHODS.map(p => p.value));
+  const [showVoidRefund, setShowVoidRefund] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [vrLoading, setVrLoading] = useState(false);
+  const [vrReason, setVrReason] = useState('');
+  const [vrAction, setVrAction] = useState<'VOID' | 'REFUND' | null>(null);
+  const [vrOrderId, setVrOrderId] = useState('');
+  const [vrAmount, setVrAmount] = useState('');
 
   // Stores
   const {
@@ -564,6 +571,37 @@ export default function POSView() {
     setShowCustomerDropdown(false);
   }, [setSelectedCustomer]);
 
+  const handleOpenVoidRefund = useCallback(async () => {
+    setShowVoidRefund(true);
+    setVrLoading(true);
+    setVrAction(null);
+    setVrReason('');
+    setVrAmount('');
+    try {
+      const today = new Date().toISOString();
+      const yesterday = new Date(Date.now() - 86400000).toISOString();
+      const res = await fetch(`/api/orders?from=${yesterday}&to=${today}`);
+      const data = await res.json();
+      setRecentOrders(data.filter((o: Order) => o.status === 'COMPLETED').slice(0, 20));
+    } catch { }
+    setVrLoading(false);
+  }, []);
+
+  const handleVoidRefund = useCallback(async () => {
+    if (!vrOrderId || !vrAction || !vrReason.trim()) return;
+    setVrLoading(true);
+    try {
+      const body: any = { orderId: vrOrderId, action: vrAction, reason: vrReason, employeeId: currentEmployee?.id };
+      if (vrAction === 'REFUND' && vrAmount) body.refundAmount = parseFloat(vrAmount);
+      const res = await fetch('/api/refunds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        setRecentOrders(prev => prev.map(o => o.id === vrOrderId ? { ...o, status: vrAction === 'VOID' ? 'VOID' : 'REFUND' } : o));
+        setVrAction(null); setVrReason(''); setVrAmount(''); setVrOrderId('');
+      }
+    } catch { }
+    setVrLoading(false);
+  }, [vrOrderId, vrAction, vrReason, vrAmount, currentEmployee]);
+
   // ============ ANIMATION VARIANTS ============
   const fadeIn = {
     initial: { opacity: 0, y: 8 },
@@ -980,6 +1018,13 @@ export default function POSView() {
           >
             <Pause className="w-3.5 h-3.5" />
             Pause Order
+          </button>
+          <button
+            onClick={handleOpenVoidRefund}
+            className="w-full py-2 rounded-xl glass-subtle text-xs font-medium text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5"
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            Void / Refund
           </button>
           <motion.button
             onClick={() => {
@@ -1746,6 +1791,44 @@ export default function POSView() {
 
       {/* Receipt View */}
       <AnimatePresence>{isReceiptOpen && renderReceiptView()}</AnimatePresence>
+
+      {/* Void / Refund Dialog */}
+      <AnimatePresence>
+        {showVoidRefund && (
+          <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-lg" onClick={() => setShowVoidRefund(false)} />
+            <motion.div className="relative z-10 w-full max-w-md glass-strong rounded-2xl overflow-hidden max-h-[85vh] flex flex-col" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+                <h2 className="text-sm font-bold text-white">Void / Refund Order</h2>
+                <button onClick={() => setShowVoidRefund(false)} className="w-8 h-8 rounded-lg glass-subtle flex items-center justify-center text-white/40 hover:text-white"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4 space-y-3">
+                {vrLoading && !recentOrders.length ? <p className="text-xs text-[#888] text-center py-4">Loading...</p> : !vrAction ? (
+                  recentOrders.map((o) => (
+                    <div key={o.id} className="glass-subtle rounded-xl p-3 space-y-1.5">
+                      <div className="flex justify-between"><span className="text-xs font-medium text-white">{o.orderNumber}</span><span className="text-xs text-[#C48A3A]">{formatCurrency(o.totalAmount)}</span></div>
+                      <p className="text-[10px] text-[#888]">{new Date(o.createdAt).toLocaleString()} - {o.paymentMethod.replace(/_/g, ' ')} - {(o.items || []).length} items</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setVrAction('VOID'); setVrOrderId(o.id); setVrAmount(''); }} className="flex-1 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-[10px] font-medium hover:bg-red-500/20">Void</button>
+                        <button onClick={() => { setVrAction('REFUND'); setVrOrderId(o.id); setVrAmount(String(o.totalAmount)); }} className="flex-1 py-1.5 rounded-lg bg-orange-500/10 text-orange-400 text-[10px] font-medium hover:bg-orange-500/20">Refund</button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-[#888]">{vrAction === 'VOID' ? 'VOID will cancel the order and restore inventory.' : 'REFUND will mark the order as refunded.'}</p>
+                    {vrAction === 'REFUND' && (
+                      <div><label className="text-xs text-[#888] mb-1 block">Refund Amount</label><input type="number" value={vrAmount} onChange={e => setVrAmount(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white focus:outline-none focus:border-red-500/50" /></div>
+                    )}
+                    <div><label className="text-xs text-[#888] mb-1 block">Reason (required)</label><input type="text" value={vrReason} onChange={e => setVrReason(e.target.value)} placeholder="Enter reason..." className="w-full px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white placeholder:text-[#666] focus:outline-none focus:border-red-500/50" /></div>
+                    <div className="flex gap-2"><button onClick={() => setVrAction(null)} className="flex-1 py-2.5 rounded-xl glass-subtle text-xs text-white/60">Cancel</button><button onClick={handleVoidRefund} disabled={vrLoading || !vrReason.trim()} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-xs font-medium disabled:opacity-40">Confirm {vrAction}</button></div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
