@@ -252,14 +252,14 @@ export default function EmployeesView() {
         <h4 className="text-sm font-bold text-white mb-4">Today&apos;s Sales Performance</h4>
         <div className="space-y-3">
           {employees.filter(e => e.role === 'CASHIER' || e.role === 'MANAGER').map((emp, i) => {
-            const fakeSales = [12450, 9800, 8200][i] || 5000;
-            const maxSales = 15000;
-            const pct = Math.min(100, (fakeSales / maxSales) * 100);
+const realSales = 0;
+            const maxSales = 1;
+            const pct = 0;
             return (
               <div key={emp.id}>
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-[#888]">{emp.name}</span>
-                  <span className="text-[#C48A3A] font-medium">{formatCurrency(fakeSales)}</span>
+                  <span className="text-[#C48A3A] font-medium">{formatCurrency(0)}</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ delay: i * 0.1, duration: 0.6 }}
